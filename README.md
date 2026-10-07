@@ -1,7 +1,6 @@
 # Petlibro Local - Home Assistant App
 
-> ### EARLY BETA
-> This app is in early beta testing and is open to anyone willing to test it. You should be comfortable with Home Assistant, Mosquitto broker configuration, and local DNS overrides before attempting setup. Bug reports and feedback are very welcome; please use [GitHub Issues](https://github.com/smcneece/petlibro-local/issues).
+> **Setup note:** this is still a young project, though it has been running my own devices since mid-August. You should be comfortable with Home Assistant, Mosquitto broker configuration, and local DNS overrides before attempting setup. Bug reports and feedback are very welcome; please use [GitHub Issues](https://github.com/smcneece/petlibro-local/issues).
 
 Keep your Petlibro fountains and feeders running entirely on your local network. Petlibro Local intercepts your devices' MQTT credentials during setup, connects them directly to your Home Assistant Mosquitto broker, and gives you desktop and mobile control panel with no Petlibro cloud dependency after that.
 
@@ -26,7 +25,7 @@ This software is provided **"as is", without warranty of any kind**, express or 
 By installing and using Petlibro Local you acknowledge that:
 
 - It works by intercepting your device's MQTT credentials and redirecting traffic away from the Petlibro cloud, a deliberate local-network configuration change that **may void your device warranty**.
-- It is beta software. Features may break, change, or disappear without notice.
+- It is still maturing software. Features may break, change, or disappear without notice.
 - You are responsible for maintaining an adequate care routine for your pets independent of any automation software.
 
 If you are not comfortable with these terms, do not use this software.
