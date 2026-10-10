@@ -63,6 +63,7 @@ function openDeviceModal(device) {
     b.classList.toggle("active", b.dataset.dtab === "overview");
     if (b.dataset.dtab === "log") b.style.display = "";
     if (b.dataset.dtab === "schedule") b.style.display = isFeeder ? "" : "none";
+    if (b.dataset.dtab === "led") b.style.display = device.device_type === "one_rfid" ? "" : "none";
     if (b.dataset.dtab === "controls") b.style.display = isFountain ? "" : "none";
   });
 
@@ -78,6 +79,7 @@ function renderDeviceTab(tabName) {
   const content = document.getElementById("dtab-content");
   if (tabName === "overview") content.innerHTML = buildOverviewTab(_currentDevice);
   else if (tabName === "controls") content.innerHTML = buildControlsTab(_currentDevice);
+  else if (tabName === "led") content.innerHTML = buildLedTab(_currentDevice);
   else if (tabName === "maintenance") content.innerHTML = buildMaintenanceTab(_currentDevice);
   else if (tabName === "log") {
     content.innerHTML = `<p style="color:var(--pl-subtext);padding:16px 0;text-align:center">Loading...</p>`;
@@ -181,11 +183,11 @@ function buildOverviewTab(device) {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <label style="white-space:nowrap;font-size:13px;color:var(--pl-subtext)">${t("overview.portions")}</label>
         <select class="form-input" id="feeder-portions" style="width:110px">
-          <option value="1" selected>${fmtPortions(1, device.calibrated_grams_per_portion)}</option>
-          <option value="2">${fmtPortions(2, device.calibrated_grams_per_portion)}</option>
-          <option value="3">${fmtPortions(3, device.calibrated_grams_per_portion)}</option>
-          <option value="4">${fmtPortions(4, device.calibrated_grams_per_portion)}</option>
-          <option value="5">${fmtPortions(5, device.calibrated_grams_per_portion)}</option>
+          <option value="1" selected>${fmtPortions(1, device.calibrated_grams_per_portion, device.feed_unit)}</option>
+          <option value="2">${fmtPortions(2, device.calibrated_grams_per_portion, device.feed_unit)}</option>
+          <option value="3">${fmtPortions(3, device.calibrated_grams_per_portion, device.feed_unit)}</option>
+          <option value="4">${fmtPortions(4, device.calibrated_grams_per_portion, device.feed_unit)}</option>
+          <option value="5">${fmtPortions(5, device.calibrated_grams_per_portion, device.feed_unit)}</option>
         </select>
         <button class="btn-primary" id="btn-feed-now" style="flex:1">${t("overview.feed_now")}</button>
       </div>
@@ -225,18 +227,10 @@ function buildOverviewTab(device) {
           <input type="checkbox" id="feeder-child-lock" ${childLock ? "checked" : ""}> ${t("overview.child_lock")}
         </label>
       </div>
-    </div>
-    <div style="margin-top:16px">
-      <div class="tab-section-heading">${t("overview.led_display")}</div>
-      <div class="form-row">
-        <label class="form-label">${t("overview.scrolling_text")}</label>
-        <div style="display:flex;gap:8px">
-          <input class="form-input" id="feeder-display-text" type="text" maxlength="20" placeholder="e.g. MOCHI" value="${escHtml(device.display_text || "")}" oninput="this.value=this.value.toUpperCase()">
-          <button class="btn-secondary" id="btn-send-display-text" style="flex-shrink:0">Send</button>
-        </div>
-        <p class="form-hint">${t("overview.display_text_hint")}</p>
-      </div>
-      <button class="btn-secondary" id="btn-open-icon-editor" style="width:100%;margin-top:4px">${t("overview.icon_editor_btn")}</button>
+      ${_hoursBlock("hrs-sound", t("hours.sound_heading"),
+          device.sound_hours_mode || (device.soundAgingType === 2 ? "custom" : "all"),
+          device.sound_start_local || (device.soundStartTimeUtc ? _utcToLocal(device.soundStartTimeUtc) : ""), device.sound_end_local || (device.soundEndTimeUtc ? _utcToLocal(device.soundEndTimeUtc) : ""),
+          t("hours.sound_hint"))}
     </div>
     ${(!device.pets?.length) ? `
     <div style="background:rgba(224,168,85,.12);border:1px solid rgba(224,168,85,.5);color:var(--pl-warning);border-radius:var(--pl-radius-sm);padding:10px 12px;font-size:13px;margin-top:14px;line-height:1.5">
@@ -272,11 +266,11 @@ function buildOverviewTab(device) {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
         <label style="white-space:nowrap;font-size:13px;color:var(--pl-subtext)">${t("overview.portions")}</label>
         <select class="form-input" id="feeder-portions" style="width:110px">
-          <option value="1" selected>${fmtPortions(1, device.calibrated_grams_per_portion)}</option>
-          <option value="2">${fmtPortions(2, device.calibrated_grams_per_portion)}</option>
-          <option value="3">${fmtPortions(3, device.calibrated_grams_per_portion)}</option>
-          <option value="4">${fmtPortions(4, device.calibrated_grams_per_portion)}</option>
-          <option value="5">${fmtPortions(5, device.calibrated_grams_per_portion)}</option>
+          <option value="1" selected>${fmtPortions(1, device.calibrated_grams_per_portion, device.feed_unit)}</option>
+          <option value="2">${fmtPortions(2, device.calibrated_grams_per_portion, device.feed_unit)}</option>
+          <option value="3">${fmtPortions(3, device.calibrated_grams_per_portion, device.feed_unit)}</option>
+          <option value="4">${fmtPortions(4, device.calibrated_grams_per_portion, device.feed_unit)}</option>
+          <option value="5">${fmtPortions(5, device.calibrated_grams_per_portion, device.feed_unit)}</option>
         </select>
         <button class="btn-primary" id="btn-feed-now" style="flex:1">${t("overview.feed_now")}</button>
       </div>
@@ -399,6 +393,43 @@ function buildControlsTab(device) {
   <div class="tab-section-heading" style="margin-top:18px">${t("overview.calibrate_scale")}</div>
   <button class="btn-secondary" id="btn-calibrate-scale">${t("overview.calibrate_scale")}</button>
   <p class="form-hint">${t("overview.calibrate_scale_hint")}</p>`;
+}
+
+// LED tab (One RFID): display on/off and hours, scrolling text, icon editor,
+// animations and the animation editor. Moved out of Overview.
+function buildLedTab(device) {
+  return `    <div style="margin-top:16px">
+      <div class="tab-section-heading">${t("overview.led_display")}</div>
+      <div class="toggle-row">
+        <span class="toggle-label">${t("hours.display_show")}</span>
+        <button class="toggle-switch ${(device.screenDisplaySwitch ?? device.enableScreenDisplay ?? true) ? "sw-on" : "sw-off"}" id="hrs-display-switch"></button>
+      </div>
+      ${_hoursBlock("hrs-display", t("hours.display_heading"),
+          device.display_hours_mode || (device.screenDisplayAgingType === 2 ? "custom" : "all"),
+          device.display_start_local || (device.screenDisplayStartTimeUtc ? _utcToLocal(device.screenDisplayStartTimeUtc) : ""), device.display_end_local || (device.screenDisplayEndTimeUtc ? _utcToLocal(device.screenDisplayEndTimeUtc) : ""),
+          t("hours.display_hint"))}
+      <div class="form-row" style="margin-top:14px">
+        <label class="form-label">${t("overview.scrolling_text")}</label>
+        <div style="display:flex;gap:8px">
+          <input class="form-input" id="feeder-display-text" type="text" maxlength="20" placeholder="e.g. MOCHI" value="${escHtml(device.display_text || "")}" oninput="this.value=this.value.toUpperCase()">
+          <button class="btn-secondary" id="btn-send-display-text" style="flex-shrink:0">Send</button>
+        </div>
+        <p class="form-hint">${t("overview.display_text_hint")}</p>
+      </div>
+      <button class="btn-secondary" id="btn-open-icon-editor" style="width:100%;margin-top:4px">${t("overview.icon_editor_btn")}</button>
+      <div class="form-row" style="margin-top:14px">
+        <label class="form-label">${t("anim.heading")}</label>
+        <select class="form-input" id="anim-select"><option>${t("anim.loading")}</option></select>
+        <canvas id="anim-preview" width="260" height="70" style="width:100%;max-width:260px;margin-top:8px;border-radius:6px;background:#10101a;display:block"></canvas>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <label style="font-size:13px;color:var(--pl-subtext);white-space:nowrap">${t("anim.speed")}</label>
+          <input type="range" id="anim-speed" min="2" max="8" value="4" style="flex:1">
+          <button class="btn-secondary" id="anim-send" style="flex-shrink:0">${t("anim.send")}</button>
+        </div>
+        <p class="form-hint">${t("anim.hint")}</p>
+        <button class="btn-secondary" id="btn-open-anim-editor" style="width:100%">${t("animed.open")}</button>
+      </div>
+    </div>`;
 }
 
 // ── Maintenance tab ───────────────────────────────────────────────────────
@@ -622,7 +653,7 @@ function buildFeederLogTab(device, entries) {
 
     let line;
     if (e.type === "food_dispensed") {
-      const portions = fmtPortions(e.portions, device.calibrated_grams_per_portion);
+      const portions = fmtPortions(e.portions, device.calibrated_grams_per_portion, device.feed_unit);
       const key = e.source === "manual" ? "log.food_dispensed_manual"
         : e.source === "scheduled" ? "log.food_dispensed_scheduled"
         : "log.food_dispensed"; // older entries logged before this distinction existed
@@ -692,6 +723,129 @@ function _schedDayLabel(repeatDay) {
   return sorted.map(d => days[d===7?6:d-1]).join(", ");
 }
 
+// Device Sound hours / LED Display hours (One RFID). Same fields the vendor
+// app's two screens send: All day, or a Custom time window (local HH:MM).
+function _hoursBlock(id, heading, mode, start, end, hint) {
+  const custom = mode === "custom";
+  return `<div class="form-row" style="margin-top:8px">
+    <label class="form-label">${heading}</label>
+    <select class="form-input" id="${id}-mode">
+      <option value="all" ${custom ? "" : "selected"}>${t("hours.all_day")}</option>
+      <option value="custom" ${custom ? "selected" : ""}>${t("hours.custom")}</option>
+    </select>
+  </div>
+  <div id="${id}-times" style="${custom ? "" : "display:none"}">
+    <div style="display:flex;gap:8px">
+      <div style="flex:1"><label class="form-label">${t("hours.from")}</label>
+        <input class="form-input" id="${id}-start" type="time" value="${start || "08:00"}"></div>
+      <div style="flex:1"><label class="form-label">${t("hours.until")}</label>
+        <input class="form-input" id="${id}-end" type="time" value="${end || "20:00"}"></div>
+    </div>
+  </div>
+  <button class="btn-secondary" id="${id}-apply" style="width:100%;margin-top:8px">${t("hours.apply")}</button>
+  <p class="form-hint">${hint}</p>`;
+}
+
+// Skip today: the Petlibro app's per-plan skipEndTime (epoch ms, OBSERVED as
+// the end of the day, local midnight). A plan with a skipEndTime in the future
+// does not run until then.
+function _feederNowParts() {
+  const off = _schedTzOffset();
+  const localMs = Date.now() + off * 3600000;
+  const d = new Date(localMs);
+  return {
+    min: d.getUTCHours() * 60 + d.getUTCMinutes(),
+    wday: d.getUTCDay() === 0 ? 7 : d.getUTCDay(),
+    midnightEndMs: Math.floor(localMs / 86400000) * 86400000 + 86400000 - off * 3600000,
+  };
+}
+function _planSkipped(plan) {
+  return typeof plan.skipEndTime === "number" && plan.skipEndTime > Date.now();
+}
+// How many days ahead the plan's next occurrence is (0 = later today), or null
+// if it never runs. Skipping it sets skipEndTime to the end of that local day,
+// the same rule the Petlibro app uses for a same-day skip.
+function _nextOccurrenceDayOffset(plan) {
+  const days = plan.repeatDay || [];
+  if (!days.length) return null;
+  const now = _feederNowParts();
+  const [h, m] = _utcToLocal(plan.executionTime || "00:00").split(":").map(Number);
+  for (let off = 0; off < 8; off++) {
+    const wday = ((now.wday - 1 + off) % 7) + 1;
+    if (!days.includes(wday)) continue;
+    if (off === 0 && h * 60 + m <= now.min) continue;
+    return off;
+  }
+  return null;
+}
+function _skipLabelKey(plan) {
+  const midnight = _feederNowParts().midnightEndMs;
+  if (plan.skipEndTime <= midnight) return "schedule.skipped";
+  if (plan.skipEndTime <= midnight + 86400000) return "schedule.skipped_tomorrow";
+  return "schedule.skipped_later";
+}
+
+// LED animations: built-in presets (animations.py), previewed here and sent to
+// the feeder as a multi-frame DISPLAY_MATRIX_SERVICE.
+let _animPresets = null;
+let _animTimer = null;
+function _drawAnimFrame(canvas, frame) {
+  const ctx = canvas.getContext("2d");
+  const cell = canvas.width / 26;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  for (let r = 0; r < 7; r++) {
+    for (let c = 0; c < 26; c++) {
+      const on = (frame[r] >> (25 - c)) & 1;
+      ctx.fillStyle = on ? "#fff0c8" : "#262636";
+      ctx.beginPath();
+      ctx.arc(c * cell + cell / 2, r * cell + cell / 2 + 3, cell * 0.38, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+async function _wireAnimations(d) {
+  const sel = document.getElementById("anim-select");
+  const canvas = document.getElementById("anim-preview");
+  const speed = document.getElementById("anim-speed");
+  const sendBtn = document.getElementById("anim-send");
+  if (!sel || !canvas) return;
+  if (!_animPresets) {
+    try { _animPresets = await api("GET", "/api/animations"); } catch { _animPresets = []; }
+  }
+  if (!document.getElementById("anim-select")) return;   // tab changed while loading
+  sel.innerHTML = _animPresets.map((a, i) => `<option value="${i}">${a.custom ? "\u2605 " : ""}${escHtml(a.name)} (${a.count})</option>`).join("");
+  const current = () => _animPresets[+sel.value];
+  const play = () => {
+    if (_animTimer) clearInterval(_animTimer);
+    const a = current();
+    if (!a) return;
+    let i = 0;
+    _animTimer = setInterval(() => {
+      if (!canvas.isConnected) { clearInterval(_animTimer); _animTimer = null; return; }
+      _drawAnimFrame(canvas, a.frames[i++ % a.frames.length]);
+    }, Math.max(1, +speed.value) * 25);
+  };
+  speed.value = _animPresets[0]?.interval || 4;
+  sel.onchange = () => { speed.value = current().interval; play(); };
+  speed.oninput = play;
+  play();
+  sendBtn.onclick = async () => {
+    const a = current();
+    if (!a) return;
+    const orig = sendBtn.textContent;
+    sendBtn.textContent = t("overview.sending");
+    sendBtn.disabled = true;
+    try {
+      await api("POST", `/api/devices/${d.serial}/command`, { _display_animation: { frames: a.frames, interval: +speed.value, loop: true, name: a.name } });
+      sendBtn.textContent = t("overview.sent");
+    } catch(e) {
+      sendBtn.textContent = t("overview.failed");
+      alert(t("overview.cmd_failed", {error: e.message}));
+    }
+    setTimeout(() => { sendBtn.textContent = orig; sendBtn.disabled = false; }, 2000);
+  };
+}
+
 function buildScheduleTab(plans) {
   // Display in chronological (local time) order for readability, but keep
   // data-idx pointing at each plan's real position in the underlying array --
@@ -703,13 +857,15 @@ function buildScheduleTab(plans) {
   const rows = order.map(i => {
     const plan = plans[i];
     const enabled = plan._enabled !== false;
+    const skipped = _planSkipped(plan);
     const dayLabel = _schedDayLabel(plan.repeatDay);
     const portions = plan.grainNum || 1;
     const sound = plan.enableAudio ? ` · ${t("schedule.sound_times", {n: plan.audioTimes||1})}` : "";
     return `<div class="sched-row${enabled?"":' disabled'}" data-idx="${i}">
       <div class="sched-time">${escHtml(fmtTime12(_utcToLocal(plan.executionTime||"00:00")))}</div>
-      <div class="sched-meta">${escHtml(dayLabel)} · ${escHtml(fmtPortions(portions, _currentDevice?.calibrated_grams_per_portion))}${escHtml(sound)}</div>
+      <div class="sched-meta">${escHtml(dayLabel)} · ${escHtml(fmtPortions(portions, _currentDevice?.calibrated_grams_per_portion, _currentDevice?.feed_unit))}${escHtml(sound)}${skipped ? ` · <span style="color:var(--pl-warning)">${t(_skipLabelKey(plan))}</span>` : ""}</div>
       <div class="sched-actions">
+        ${skipped || _nextOccurrenceDayOffset(plan) !== null ? `<button class="sched-skip-btn" data-idx="${i}" title="${t(skipped ? "schedule.undo_skip" : "schedule.skip_today")}" style="background:none;border:1px solid ${skipped ? "var(--pl-warning)" : "var(--pl-border)"};border-radius:6px;cursor:pointer;padding:3px 8px;font-size:12px;line-height:1.2;color:${skipped ? "var(--pl-warning)" : "var(--pl-text)"}">${t(skipped ? "schedule.undo_btn" : "schedule.skip_btn")}</button>` : ""}
         <button class="sched-toggle${enabled?" on":""}" data-idx="${i}" title="${enabled?"Disable":"Enable"}"></button>
         <button class="sched-edit-btn" data-idx="${i}" title="Edit">✏️</button>
         <button class="sched-del-btn" data-idx="${i}" title="Delete" style="background:none;border:none;cursor:pointer;padding:4px;color:var(--pl-danger,#e05252);font-size:16px;line-height:1;opacity:0.8">&#x2715;</button>
@@ -732,7 +888,7 @@ function buildScheduleTab(plans) {
     <div class="form-row">
       <label>${t("schedule.portions")}</label>
       <div class="portion-chips" id="sf-portions">
-        ${[1,2,3,4,5].map(n=>`<div class="portion-chip${n===1?" on":""}" data-n="${n}">${escHtml(fmtPortions(n, _currentDevice?.calibrated_grams_per_portion))}</div>`).join("")}
+        ${[1,2,3,4,5].map(n=>`<div class="portion-chip${n===1?" on":""}" data-n="${n}">${escHtml(fmtPortions(n, _currentDevice?.calibrated_grams_per_portion, _currentDevice?.feed_unit))}</div>`).join("")}
       </div>
     </div>
     <div class="form-row" style="display:flex;align-items:center;gap:10px">
@@ -752,7 +908,14 @@ function buildScheduleTab(plans) {
 
   const addBtn = `<button class="btn-secondary" id="sched-add-btn" style="width:100%;margin-bottom:10px">${t("schedule.add")}</button>`;
 
+  const _fu = _currentDevice?.feed_unit || "auto";
+  const unitOpt = (v, key) => `<option value="${v}"${_fu === v ? " selected" : ""}>${t(key)}</option>`;
   const calSection = (_currentDevice?.device_type === "one_rfid" || _currentDevice?.device_type === "granary") ? `
+    <div class="tab-section-heading" style="margin-top:18px">${t("feed_unit.heading")}</div>
+    <select class="form-select" id="feed-unit-select">
+      ${unitOpt("auto", "feed_unit.auto")}${unitOpt("cup", "feed_unit.cup")}${unitOpt("oz", "feed_unit.oz")}${unitOpt("g", "feed_unit.g")}${unitOpt("ml", "feed_unit.ml")}
+    </select>
+    <p class="form-hint" style="margin-top:6px">${t("feed_unit.hint")}</p>
     <div class="tab-section-heading" style="margin-top:18px">${t("maint.feed_calibration")}</div>
     <p class="form-hint">${_currentDevice.calibrated_grams_per_portion
       ? t("maint.feed_calibration_set", {grams: _currentDevice.calibrated_grams_per_portion})
@@ -762,7 +925,15 @@ function buildScheduleTab(plans) {
       ${_currentDevice.calibrated_grams_per_portion ? `<button class="btn-secondary" id="btn-reset-feed-calibration" style="flex-shrink:0;color:var(--pl-danger)">${t("maint.reset_calibration")}</button>` : ""}
     </div>` : "";
 
+  const _paused = !!_currentDevice?.schedules_paused;
+  const pauseRow = `<div class="toggle-row">
+      <span class="toggle-label">${t("schedule.run_all")}</span>
+      <button class="toggle-switch ${_paused ? "sw-off" : "sw-on"}" id="sched-run-all"></button>
+    </div>
+    <p class="form-hint" style="margin-bottom:12px;${_paused ? "color:var(--pl-danger)" : ""}">${t(_paused ? "schedule.paused_note" : "schedule.run_all_hint")}</p>`;
+
   return `<div class="tab-section-heading">${t("schedule.heading")}</div>
+    ${pauseRow}
     ${addBtn}
     ${form}
     <div class="sched-list" id="sched-list">${rows || `<p style="color:var(--pl-subtext);text-align:center;padding:12px 0">${t("schedule.no_plans")}</p>`}</div>
@@ -783,6 +954,27 @@ function wireScheduleTabHandlers() {
   const form = document.getElementById("sched-form");
   if (!list || !form) return;
 
+  const runAll = document.getElementById("sched-run-all");
+  if (runAll) {
+    runAll.onclick = async () => {
+      const pause = !_currentDevice.schedules_paused;
+      try {
+        await api("POST", `/api/devices/${_currentDevice.serial}/schedules-paused`, { paused: pause });
+        _patchDevice(_currentDevice.serial, { schedules_paused: pause });
+        renderDeviceTab("schedule");
+      } catch(e) { alert(t("overview.cmd_failed", {error: e.message})); }
+    };
+  }
+
+  const unitSel = document.getElementById("feed-unit-select");
+  if (unitSel) {
+    unitSel.onchange = async () => {
+      const v = unitSel.value;
+      await api("POST", `/api/devices/${_currentDevice.serial}`, { feed_unit: v === "auto" ? null : v });
+      _patchDevice(_currentDevice.serial, { feed_unit: v === "auto" ? null : v });
+      renderDeviceTab("schedule");
+    };
+  }
   const calibrateBtn = document.getElementById("btn-calibrate-feed");
   if (calibrateBtn) calibrateBtn.onclick = () => openFeedCalibration(_currentDevice);
   const resetCalBtn = document.getElementById("btn-reset-feed-calibration");
@@ -836,6 +1028,15 @@ function wireScheduleTabHandlers() {
       btn.onclick = async () => {
         const idx = +btn.dataset.idx;
         _schedPlans[idx]._enabled = !(_schedPlans[idx]._enabled !== false);
+        await _saveSchedule();
+        rerender();
+      };
+    });
+    list.querySelectorAll(".sched-skip-btn").forEach(btn => {
+      btn.onclick = async () => {
+        const plan = _schedPlans[+btn.dataset.idx];
+        if (_planSkipped(plan)) delete plan.skipEndTime;
+        else plan.skipEndTime = _feederNowParts().midnightEndMs + _nextOccurrenceDayOffset(plan) * 86400000;
         await _saveSchedule();
         rerender();
       };
@@ -894,6 +1095,7 @@ function wireScheduleTabHandlers() {
       syncTime: Date.now(),
       _enabled: editIdx !== "" ? (_schedPlans[+editIdx]._enabled !== false) : true,
     };
+    if (editIdx !== "" && _schedPlans[+editIdx].skipEndTime) planData.skipEndTime = _schedPlans[+editIdx].skipEndTime;
     if (editIdx !== "") {
       _schedPlans[+editIdx] = planData;
     } else {
@@ -1002,6 +1204,35 @@ function buildNotificationsTab(device) {
 }
 
 // ── Wire device tab handlers ──────────────────────────────────────────────
+function _wireHours(d, id, cmdKey, fields) {
+  const modeEl = document.getElementById(`${id}-mode`);
+  const applyEl = document.getElementById(`${id}-apply`);
+  if (!modeEl || !applyEl) return;
+  modeEl.onchange = () => {
+    document.getElementById(`${id}-times`).style.display = modeEl.value === "custom" ? "" : "none";
+  };
+  applyEl.onclick = async () => {
+    const mode = modeEl.value;
+    const start = document.getElementById(`${id}-start`).value;
+    const end = document.getElementById(`${id}-end`).value;
+    if (mode === "custom" && (!start || !end || start === end)) { alert(t("hours.err_times")); return; }
+    // Visible feedback so a click that did register is distinguishable
+    // from one that did nothing (the device gives no reply to show).
+    const orig = applyEl.textContent;
+    applyEl.textContent = t("overview.sending");
+    applyEl.disabled = true;
+    try {
+      await api("POST", `/api/devices/${d.serial}/command`, { [cmdKey]: { mode, start, end } });
+      _patchDevice(d.serial, { [fields[0]]: mode, [fields[1]]: start, [fields[2]]: end });
+      applyEl.textContent = t("overview.sent");
+    } catch(e) {
+      applyEl.textContent = t("overview.failed");
+      alert(t("overview.cmd_failed", {error: e.message}));
+    }
+    setTimeout(() => { applyEl.textContent = orig; applyEl.disabled = false; }, 2000);
+  };
+}
+
 function wireDeviceTabHandlers(tabName) {
   const d = _currentDevice;
   if (tabName === "controls") {
@@ -1167,6 +1398,8 @@ function wireDeviceTabHandlers(tabName) {
     feederAutoSave("feeder-volume",           el => ({ volume: parseInt(el.value) || 50 }), 2000);
     feederAutoSave("feeder-child-lock",       el => ({ childLockSwitch: el.checked }));
 
+    _wireHours(d, "hrs-sound", "_sound_hours", ["sound_hours_mode", "sound_start_local", "sound_end_local"]);
+
     // Granary Smart Feeder controls -- unlike the RFID feeder above, this
     // device's real captures showed the vendor app always resending its
     // full settings bundle together, never a lone changed field (see
@@ -1198,6 +1431,22 @@ function wireDeviceTabHandlers(tabName) {
       }, 2000);
     }
 
+  }
+  else if (tabName === "led") {
+    _wireHours(d, "hrs-display", "_display_hours", ["display_hours_mode", "display_start_local", "display_end_local"]);
+    _wireAnimations(d);
+    const dispSw = document.getElementById("hrs-display-switch");
+    if (dispSw) {
+      dispSw.onclick = async () => {
+        const on = !dispSw.classList.contains("sw-on");
+        try {
+          await api("POST", `/api/devices/${d.serial}/command`, { _display_switch: on });
+          _patchDevice(d.serial, { screenDisplaySwitch: on, enableScreenDisplay: on });
+          renderDeviceTab("led");
+        } catch(e) { alert(t("overview.cmd_failed", {error: e.message})); }
+      };
+    }
+
     const sendDisplayText = document.getElementById("btn-send-display-text");
     if (sendDisplayText) {
       sendDisplayText.onclick = async () => {
@@ -1218,6 +1467,8 @@ function wireDeviceTabHandlers(tabName) {
       };
     }
 
+    const openAnimEditorBtn = document.getElementById("btn-open-anim-editor");
+    if (openAnimEditorBtn) openAnimEditorBtn.onclick = () => openAnimEditor(d.serial);
     const openIconEditorBtn = document.getElementById("btn-open-icon-editor");
     if (openIconEditorBtn) {
       openIconEditorBtn.onclick = () => openIconEditor(d.serial);

@@ -56,6 +56,11 @@ ALLOWED_DEVICE_FIELDS = {
     "light_end_time",
     "last_drink_ts",
     "calibrated_grams_per_portion",
+    "feed_unit",
+    "schedules_paused",
+    "display_animation_name",
+    "sound_hours_mode", "sound_start_local", "sound_end_local",
+    "display_hours_mode", "display_start_local", "display_end_local",
 }
 
 ALLOWED_PET_FIELDS = {
@@ -63,6 +68,7 @@ ALLOWED_PET_FIELDS = {
     "notify_bell", "notify_email", "notify_mobile",
     "no_eat_alert_enabled", "no_eat_alert_hours",
     "notify_eating_activity",
+    "no_eat_alerted_for",
 }
 
 _DEVICE_DEFAULTS = {
@@ -246,6 +252,24 @@ def get_device_feeding_plans(serial: str) -> list:
     return _load().get("_feeding_plans", {}).get(serial, [])
 
 
+def occurrence_skipped(plan: dict, ts_s: float) -> bool:
+    """True while a plan is skipped (the Petlibro app's per-plan skipEndTime,
+    epoch ms, OBSERVED): every occurrence before that moment does not run."""
+    end = plan.get("skipEndTime")
+    return isinstance(end, (int, float)) and ts_s * 1000 < end
+
+
+def schedules_paused(serial: str) -> bool:
+    return bool(get_devices().get(serial, {}).get("schedules_paused"))
+
+
+def get_active_feeding_plans(serial: str) -> list:
+    """Stored plans, or none at all while the device's schedules are paused.
+    Everything that acts on the schedule (push to the feeder, next meal, missed
+    feed alert, clock hold) uses this; the editor keeps showing stored plans."""
+    return [] if schedules_paused(serial) else get_device_feeding_plans(serial)
+
+
 def save_device_feeding_plans(serial: str, plans: list):
     data = _load()
     data.setdefault("_feeding_plans", {})[serial] = plans
@@ -359,6 +383,47 @@ def get_fountain_pet_intake_today(serial: str) -> dict:
 
 
 # ── Custom display icons ──────────────────────────────────────────────────────
+
+MAX_CUSTOM_ANIMATIONS = 20
+
+
+def get_custom_animations() -> list:
+    """Saved LED animations [{id, name, interval, frames}]; frames are lists of 7 ints."""
+    return list(_load().get("_custom_animations", []))
+
+
+def save_custom_animation(name: str, frames: list, interval: int, anim_id: int | None = None) -> int | None:
+    """Create a saved animation, or update the one with anim_id. Returns its id,
+    or None if updating an id that does not exist or the library is full."""
+    data = _load()
+    anims = data.setdefault("_custom_animations", [])
+    entry = {"name": name[:32] or "Animation", "interval": max(1, min(10, int(interval))),
+             "frames": [[int(v) for v in f] for f in frames]}
+    if anim_id is not None:
+        for a in anims:
+            if a["id"] == anim_id:
+                a.update(entry)
+                _save(data)
+                return anim_id
+        return None
+    if len(anims) >= MAX_CUSTOM_ANIMATIONS:
+        return None
+    new_id = max((a.get("id", 0) for a in anims), default=0) + 1
+    anims.append({"id": new_id, **entry})
+    _save(data)
+    return new_id
+
+
+def delete_custom_animation(anim_id: int) -> bool:
+    data = _load()
+    anims = data.get("_custom_animations", [])
+    kept = [a for a in anims if a["id"] != anim_id]
+    if len(kept) == len(anims):
+        return False
+    data["_custom_animations"] = kept
+    _save(data)
+    return True
+
 
 def get_custom_icons() -> list:
     """Return list of saved custom icons [{id, name, rows}]."""

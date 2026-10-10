@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2026.09.7"
+VERSION = "2026.10.1"
 
 # Credential capture state
 _capture_state: dict = {"status": "idle", "result": {}}
@@ -399,6 +399,42 @@ async def handle_api_device_command(request):
     except Exception:
         _LOGGER.exception("Command failed for %s...", serial[:6])
         return web.Response(status=400, text="Bad request")
+
+
+async def handle_api_animations_get(request):
+    import animations
+    presets = [{**p, "key": "p:" + p["id"], "custom": False} for p in animations.list_presets()]
+    mine = [{"id": a["id"], "key": f"u:{a['id']}", "name": a["name"], "frames": a["frames"],
+             "interval": a.get("interval", animations.DEFAULT_INTERVAL), "count": len(a["frames"]), "custom": True}
+            for a in storage.get_custom_animations()]
+    return web.json_response(presets + mine)
+
+
+async def handle_api_animation_save(request):
+    """POST creates, PUT /{id} updates a saved animation (validated server side)."""
+    import animations
+    try:
+        body = await request.json()
+        frames = body.get("frames")
+        if not animations.validate_frames(frames):
+            return web.Response(status=400, text="frames must be 1 to 140 lists of 7 integers")
+        anim_id = int(request.match_info["id"]) if "id" in request.match_info else None
+        new_id = storage.save_custom_animation(str(body.get("name", "Animation")), frames,
+                                               body.get("interval", animations.DEFAULT_INTERVAL), anim_id)
+        if new_id is None:
+            return web.Response(status=409, text="Animation library is full" if anim_id is None else "Not found")
+        _republish_feeder_icons()
+        return web.json_response({"id": new_id})
+    except Exception:
+        _LOGGER.exception("Failed to save animation")
+        return web.Response(status=400, text="Bad request")
+
+
+async def handle_api_animation_delete(request):
+    ok = storage.delete_custom_animation(int(request.match_info["id"]))
+    if ok:
+        _republish_feeder_icons()
+    return web.json_response({"ok": ok})
 
 
 async def handle_api_icons_get(request):
@@ -802,6 +838,24 @@ async def handle_api_feeding_plans_post(request):
         return web.Response(status=400, text="Bad request")
 
 
+async def handle_api_schedules_paused(request):
+    """Pause or resume every feeding schedule on a feeder without touching the
+    stored plans: while paused the feeder is sent an empty plan list."""
+    serial = request.match_info["serial"]
+    try:
+        body = await request.json()
+        paused = bool(body.get("paused"))
+        storage.save_device(serial, {"schedules_paused": paused})
+        ok = await devices.send_feeding_plans(serial, storage.get_device_feeding_plans(serial))
+        asyncio.ensure_future(devices.republish_ha_discovery(serial))
+        asyncio.ensure_future(devices.publish_ha_state(serial))
+        _LOGGER.info("Feeding schedules %s for %s...", "PAUSED" if paused else "resumed", serial[:6])
+        return web.json_response({"status": "ok", "paused": paused, "mqtt": ok})
+    except Exception:
+        _LOGGER.exception("Pausing schedules failed for %s...", serial[:6])
+        return web.Response(status=400, text="Bad request")
+
+
 async def handle_api_device_image_upload(request):
     serial = request.match_info["serial"]
     ingress_path = request.headers.get("X-Ingress-Path", "").rstrip("/")
@@ -915,6 +969,7 @@ def main():
     app.router.add_get("/api/devices/{serial}/fountain-log",   handle_api_fountain_log)
     app.router.add_get("/api/devices/{serial}/feeding-plans",  handle_api_feeding_plans_get)
     app.router.add_post("/api/devices/{serial}/feeding-plans", handle_api_feeding_plans_post)
+    app.router.add_post("/api/devices/{serial}/schedules-paused", handle_api_schedules_paused)
     app.router.add_post("/api/devices/{serial}/image",         handle_api_device_image_upload)
     app.router.add_post("/api/devices/{serial}/push-audio",    handle_api_device_push_audio)
 
@@ -922,6 +977,10 @@ def main():
     app.router.add_post("/api/audio",                    handle_api_audio_upload)
     app.router.add_delete("/api/audio/{name}",           handle_api_audio_delete)
 
+    app.router.add_get("/api/animations",                handle_api_animations_get)
+    app.router.add_post("/api/animations",               handle_api_animation_save)
+    app.router.add_put("/api/animations/{id}",           handle_api_animation_save)
+    app.router.add_delete("/api/animations/{id}",        handle_api_animation_delete)
     app.router.add_get("/api/icons",                     handle_api_icons_get)
     app.router.add_post("/api/icons",                    handle_api_icons_post)
     app.router.add_put("/api/icons/{id}",                handle_api_icon_put)

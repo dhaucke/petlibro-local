@@ -7,6 +7,10 @@ Keep your Petlibro fountains and feeders running entirely on your local network.
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/smcneece/petlibro-local)](https://github.com/smcneece/petlibro-local/releases)
 [![GitHub](https://img.shields.io/github/license/smcneece/petlibro-local)](LICENSE)
 
+> **Before you start:** your device first has to be connected to your Wi-Fi with the official Petlibro app (that one-time setup needs the app and a Petlibro account). Once it's on your Wi-Fi, it can run 100% locally, with no cloud and no internet access at all.
+
+> **Is your device on newer firmware than the ones I've tested?** I've seen One RFID feeders on firmware 3.0.72 (hardware 5.0.0) and 2.0.47 (hardware 4.0.0), and Dockstream 2 fountains on 0.0.34 (hardware 1.0.0). I have no version for the other models. If yours shows something different (it's at the top of the device's modal), please [open an issue](https://github.com/smcneece/petlibro-local/issues) and tell me the version. If you're comfortable testing it, also tell me whether the device still reboots when Mosquitto restarts (see [Restarting Mosquitto Reboots Your Devices](#restarting-mosquitto-reboots-your-devices)). Newer firmware may behave differently, and it helps me work out what to build next.
+
 > ⚠️ **Installation type**: Petlibro Local is a Home Assistant App requiring a Supervisor-managed installation (HA OS or HA Supervised). Home Assistant Core and Home Assistant Container are not supported.
 
 > [![Sponsor](https://img.shields.io/badge/Sponsor-💖-pink)](https://github.com/sponsors/smcneece) If Petlibro Local keeps your fountain running after Petlibro changes their cloud or you just want your devices off the internet, consider sponsoring. Check out my [other HA projects](https://github.com/smcneece?tab=repositories) as well.
@@ -45,31 +49,7 @@ If you are not comfortable with these terms, do not use this software.
 | One RFID Smart Feeder | AF06 | PLAF301 | Supported |
 | Granary Smart Feeder | AF01 | PLAF103 | Beta |
 
-**Granary Smart Feeder:** No RFID and no lid on this model (confirmed via a real MQTT capture, issue #8), so pet-attributed feeding and the "Open Lid"/"Food Door" features don't apply here, only the One RFID Smart Feeder has those. Has an indicator light and a "Buttons Lock" (physical button lock) the One RFID feeder doesn't.
-
-**WF01 units:** Some Dockstream 2 boxes/units are labeled "PLWF105" rather than "PLWF106". A real MQTT capture (issue #8) confirmed a `WF01`-prefixed unit reports `PLWF106` over the wire regardless, so it's treated identically to `WF03`.
-
-**Color variant encoding:** On the Dockstream 2, I think the serial number encodes the color variant. The characters at positions 10–11 appear to indicate color: `BD` = black, `BA` = white. If other owners of the Dockstream 2 fountains could also let me know by opening an issue.
-
-**Dockstream RFID Smart Fountain:** A user-submitted `WF02` serial was initially assumed to be a plain Dockstream 2 (same prefix as an earlier report), but a real MQTT capture later showed it actually reports MQTT model `PLWF305`, a distinct, RFID-capable fountain. It reports which pet's tag was present during a drink (`WEIGHT_CHANGE_EVENT`), logged and attributed to that pet's activity the same way the One RFID feeder attributes eating sessions. Everything else (water level, filter, pump, light) works the same as the Dockstream 2. Serial prefix `WF02` now maps to this device type instead of the plain Dockstream 2, correcting the earlier assumption. Only a white variant is confirmed so far. If your `WF02` fountain doesn't have RFID tag support, or you have a black one, please open an issue so we can sort that out.
-
-**Cordless fountain:** Feature-identical to the wired Dockstream 2 with the addition of battery level, charge state (Charging / Charged / Discharging), and battery percentage. MQTT model `PLWF116` is taken from the cloud HA integration. The serial prefix `WF04` and color encoding (`BD`/`BA`) are inferred by analogy with the wired model, not confirmed from a real device. If you own one, please open an issue with your serial number so we can confirm or correct these.
-
-**One RFID Smart Feeder:** Significantly different from the fountain: RFID door, desiccant tray, feeding plan, display matrix, sound, and lid controls. Serial prefix confirmed as `AF06`, MQTT model confirmed as `PLAF301`. Color variant does not appear to be encoded at positions 10–11 the way fountain serials are. Note that Petlibro's product listing shows this device as model `PLAF103`; that's the retail box/product number and is unrelated to `PLAF301`, which is the MQTT topic model this app matches on. Serials on newer hardware revisions run a few characters longer than early units but use the same `AF06` prefix and work the same way.
-
-Additional devices can be added by contributing a device type entry, the MQTT model string (the topic prefix after `dl/`), and the serial number prefix used for auto-detection during capture. The MQTT topic structure is consistent across the Petlibro product line.
-
----
-
-## Ask Petlibro to Support Local Control
-
-This app exists because Petlibro devices only connect to their cloud broker out of the box. One small firmware change would make local control dramatically simpler: no DNS tricks, no credential capture, no internet-blocking workaround needed:
-
-1. **Configurable MQTT broker**: a single settings field to override the broker host and port. One change, massive impact.
-
-(A local audio URL for feeding sounds turned out not to need Petlibro's help at all, it's already writable over MQTT and this app supports it, see Custom feed sounds above.)
-
-If you find this app useful, please send a short email to **help@petlibro.com** asking for configurable MQTT broker addresses. A polite, specific request from a real customer carries more weight than a feature thread. A ready-to-send [email template is here](docs/petlibro-feature-request.md).
+Notes on each model (the Granary's missing lid and RFID, the WF01 labeling, serial color codes, and the model numbers) are in [Supported device notes](docs/devices.md), along with the firmware versions I have seen.
 
 ---
 
@@ -90,6 +70,9 @@ If you find this app useful, please send a short email to **help@petlibro.com** 
 #### Feeder: Icon Editor
 ![Icon Editor](images/icon-editor.png)
 
+#### Feeder: Animation Editor
+![Animation Editor](images/animation-editor.png)
+
 #### Feeder: Feeding Schedule
 ![Feeding Schedule](images/schedule.png)
 
@@ -99,124 +82,37 @@ If you find this app useful, please send a short email to **help@petlibro.com** 
 
 Petlibro devices connect to `mqtt.us.petlibro.com` over plain TCP port 1883. By pointing that hostname at your Home Assistant IP via local DNS (Pi-hole, AdGuard, or a router-level override), the device connects to your Mosquitto broker instead.
 
-The first time you set up a device, Petlibro Local briefly stops Mosquitto and runs a lightweight MQTT listener that captures the device's credentials from its CONNECT packet. Those credentials are added to Mosquitto automatically, Mosquitto restarts, and the device reconnects and authenticates. From that point forward, no Petlibro cloud traffic is involved, and you can and should block the device from accessing the internet on your router if possible. 
+The first time you set up a device, Petlibro Local briefly stops Mosquitto and runs a lightweight MQTT listener that captures the device's credentials from its CONNECT packet. Those credentials are added to Mosquitto automatically, Mosquitto restarts, and the device reconnects and authenticates. From that point forward, no Petlibro cloud traffic is involved, and you can and should block the device from accessing the internet on your router if possible.
 
 ---
 
-## Features
+## What It Does
 
-### Fountain Monitoring
-- Real-time water level shown in fl oz or ml based on your unit preference
-- Filter replacement countdown computed from the device's own timestamp
-- WiFi signal strength (RSSI) shown next to the online status badge, color-coded: green above -65 dBm, yellow above -80 dBm, red below that
-- Online/offline status with automatic detection
-- Drink log: each detected drink is recorded with a timestamp and volume, viewable as a list in the device's Log tab. Daily totals still show on the card and in the overview
-- The weight drop used to detect a drink is configurable per fountain in the Maintenance tab, defaulting to 5 grams (about a teaspoon)
+The full list, with details, is in [Features](docs/features.md). In short:
 
-### Fountain Controls
-- Pump on/off toggle
-- Light on/off toggle
-- Filter indicator light toggle
-- All controls send directly to the device over local MQTT using the standard Petlibro service protocol
+- **Fountains:** live water level, filter countdown, drink log, pump, light and light schedule controls
+- **Feeders:** Feed Now, lid control, backup battery status, last fed and next meal, maintenance reminders for the food tank, desiccant, bowl and housing
+- **Feeding schedules:** edit meals in the app, pause every schedule at once, or skip a plan's next feeding
+- **Feed amounts:** show portions as cups, ounces, grams or milliliters, with an optional calibration for your food
+- **Sound and LED (One RFID):** Device Sound hours, LED display hours, scrolling text, your own icons, built-in and custom LED animations with an animation editor, and custom feed sounds
+- **Pets:** profiles, RFID eating tracking, activity timeline, and a "hasn't eaten" alert
+- **Notifications:** in-app bell, Home Assistant notifications, email, and mobile push through the Home Assistant Companion app
+- **Clock care:** feeders have no clock that survives a reboot, so Petlibro Local notices a wrong clock and corrects it without skipping or repeating a feeding
+- **Home Assistant:** entities for everything, so automations, dashboards and voice assistants work. See [Home Assistant entities](docs/entities.md)
 
-### Feeder Monitoring
-- Next meal time pulled from the active feeding schedule and shown on the device card, converted to your local timezone
-- Last Fed time: updates whenever food is actually dispensed (scheduled or manual). On the One RFID feeder it also updates when a qualifying eating session is detected, meaning the feeder door opens and closes after at least the configured minimum eating duration (default 30 seconds, adjustable per device)
-- Maintenance reminders: food tank refill (every 14 days by default), desiccant replacement, bowl cleaning (every 7 days), and housing cleaning (every 30 days), with per-device notification toggles and a dedicated Maintenance tab
-- Food tank refill tracking: press "Filled Food Tank" whenever you top it off, and Petlibro Local tracks days since on a configurable interval, independent of the feeder's own grain sensor (which isn't always reliable)
-- Signal strength (RSSI) and firmware version shown in the device modal header
-- One RFID Smart Feeder backup battery: current charge and AC/battery status shown on the device card, modal header, and Overview tab. Exposed to Home Assistant as a Battery sensor and an "On AC Power" binary sensor. Notifications for "running on battery" (fires when caught before the feeder drops Wi-Fi to save power, since this model appears to disconnect shortly after losing AC) and a configurable low-battery percentage threshold in the Maintenance tab
+---
 
-> **Tip:** If you're setting up battery devices around your home in general, not just this feeder, check out my other project, [Battery Sentinel](https://github.com/smcneece/battery-sentinel), a Home Assistant app for monitoring battery devices with an alert system, battery type lookup, and a lot more. Genuinely one of my favorite things I've built.
+## Feed Amount Calibration (Optional)
 
-### Feeder Controls
-- Feed Now button: dispenses one portion immediately
-- Open Door: opens the feeder lid on demand (the feeder closes it automatically after its configured delay)
-- Volume: slider from 0–100 for the feeder's built-in speaker
-- Feeding schedule viewer with all scheduled meals, quantities, and enabled/disabled state
-- Display matrix: push scrolling text or a built-in icon (heart, dog, cat, elk) directly to the feeder LED display
-- **Custom Icon Editor**: draw pixel art on a 5 × 12 grid, preview it at full 26-pixel display width, save up to 12 named icons, and send them to the feeder with one tap. Includes a "Petlibro Salute" built-in preset
-- **Custom feed sounds**: upload an audio file (any common format, MP3/WAV/M4A/etc., converted automatically) or record one from your microphone, in the Settings → Audio tab. All feeders share one sound library there. From a feeder's Maintenance tab, pick a sound and push it to play on that feeder's feeds instead of the default chime. Requires a one-time "Local Audio Base URL" setting (a plain LAN address for this app, since the feeder fetches the file directly and can't use your logged-in browser session). Plays on scheduled feeds and on a manual Feed Now
-- **Feed amount calibration (optional)**: shows amounts in real grams or ounces for your specific food instead of a flat 10g per portion guess. See [Feed Amount Calibration](#feed-amount-calibration-optional) below
-- All controls send directly to the device over local MQTT using the standard Petlibro service protocol
-
-> **Note:** Existing feeding schedules created in the Petlibro app will likely continue to run on the feeder, but it is recommended to recreate them in Petlibro Local to ensure they are managed and visible here. Schedules created in the cloud app may not survive a feeder reboot once the device is running locally.
-
-> **Note on recording custom sounds:** browsers only allow microphone access ("secure context") over HTTPS or `localhost`. Most people reach Home Assistant locally over plain HTTP, so the in-app Record button often won't work there, no error, it just won't be available. Three options, easiest first:
-> 1. **Use the Home Assistant Companion App** on your phone. Recording works there even for local (non-HTTPS) connections.
-> 2. **Record with your phone or computer's own voice recorder app** (Windows' built-in Sound Recorder, or Voice Memos on Mac, both save as `.m4a`), then use Upload File instead of Record. Any common format works and is converted automatically.
-> 3. **Last resort:** some browsers let you manually allow microphone access on an insecure origin via an advanced/experimental flag (for example, Chrome's `chrome://flags/#unsafely-treat-insecure-origin-as-secure`, where you add your Home Assistant address). This varies by browser and isn't something this app can configure for you.
-
-### Feed Amount Calibration (Optional)
-
-The One RFID and Granary feeders dispense through a fixed-volume scoop rather than a scale, so one "portion" doesn't weigh the same for every food. Out of the box, Petlibro Local assumes 10g per portion everywhere it shows an amount (Feed Now, schedules, activity log). If you'd rather see real numbers for your specific food, you can calibrate.
-
-**This is entirely optional.** If you never calibrate, nothing changes and everything keeps using 10g per portion. Calibration only changes how amounts are *displayed*; it does not change how much food the feeder dispenses.
-
-To calibrate:
-1. Open the feeder's device modal, go to the **Schedule** tab, and tap **Calibrate** in the Feed Amount Calibration section.
-2. The feeder dispenses one portion. Catch it in a small dish or cup and weigh it on your kitchen scale.
-3. Enter the reading in grams or ounces (ounces is the default if you use imperial units, but grams is more accurate if your scale can show it, since one portion is only about 10g or 0.35 oz).
-4. Repeat for 3 test feeds. You'll see the average, then choose **Save** or **Redo**.
-
-**Reset to Default** in the same section puts it back to 10g per portion at any time.
-
-### Device Setup
-Two setup paths are available when adding a device.
-
-**Auto Setup** stops Mosquitto for up to 60 seconds, captures the device's credentials automatically when it reconnects, and adds them to Mosquitto without any manual copy/paste. The device type is detected from the serial number prefix. A color/variant picker lets you choose the correct product image.
-
-> **Tip:** If the app detects the device successfully but it still isn't connecting to Mosquitto afterward, try triggering the Wi-Fi reconnect in the Petlibro app a second time. Some devices need two reconnect attempts before they fully switch over to the local broker. Blocking the device from the internet may help too.
-
-**Manual Setup** is for cases where you already have the MQTT username and password (for example, from MQTT Explorer during a previous capture). Enter the serial number, credentials, device type, and color variant manually.
-
-### Device Images
-Device images are stored locally in the app. Image filenames follow the convention `{mqtt_model}_{color}.png` (for example, `plwf106_b.png` for a black Dockstream 2). Images with transparent backgrounds are recommended for best appearance against the dark UI. Multiple color variants per device type are supported.
-
-### Pets
-Add pet profiles with photo, name, breed, and weight. Assign pets to one or more devices. Pet profiles are stored locally and are independent of the Petlibro cloud account.
-
-**RFID tag tracking:** On the One RFID Smart Feeder, the pet's RFID tag number is captured automatically on the first detected eating session and saved to the pet profile. Tags can also be entered manually behind the eye toggle on the pet's profile.
-
-**Recent Activity:** Each pet's profile shows a per-pet activity timeline of eating sessions confirmed by RFID (with duration), and in future releases, drinking sessions from RFID fountains and litter box visits. Device-level feeding events without RFID confirmation remain in the device log and do not appear in the pet activity view.
-
-### Notifications
-Petlibro Local sends notifications through three channels simultaneously when enabled:
-
-- **In-app alert bell**: the bell icon in the app header shows a badge for active alerts. Clicking it opens a panel listing every active alert by device name and type. Clicking a row opens that device's detail modal.
-- **HA persistent notification**: appears in the Home Assistant notification panel and survives app restarts.
-- **Email**: sent via any Home Assistant `notify` service. Configure the service name in the device's notification settings.
-- **Mobile push**: sent via any Home Assistant `notify` service (same field; use a service that targets your mobile device, such as the Home Assistant companion app notify service).
-
-**Device alerts** are configurable per device in the device's detail modal under the Notifications tab. Alert types include:
-
-| Alert | Trigger |
-|-------|---------|
-| Device offline | No MQTT message received for 5 minutes |
-| Device back online | Device reconnects after being offline |
-| Food level low | Feeder grain sensor reports low |
-| Food tank refill due | Manual refill interval you set has elapsed (backup for the feeder's own low-food sensor, which isn't always reliable) |
-| Low water | Fountain water level drops below threshold |
-| Filter replacement due | Filter days remaining reaches 3 or fewer |
-| Cleaning overdue | Fountain or bowl cleaning interval exceeded |
-| Food door jammed | One RFID Smart Feeder reports its door couldn't close, usually a pet blocking it |
-
-**Pet activity notifications** fire when an RFID eating session is detected: "Zoey ate for 3m25s at Zoey's Feeder." These use the same notification channels as device alerts and can be enabled or disabled per pet.
-
-**Hasn't-eaten alerts** are a separate per-pet setting: choose a number of hours, and if no eating session is detected within that window, a notification fires through the same channels. It clears itself automatically the next time that pet eats, so there's nothing to dismiss by hand.
-
-### Settings
-- MQTT broker host, port, username, and password for the app's own broker connection
-- Connection test runs automatically on save and shows a green or red indicator
-- Language selection (English included; additional locales can be contributed)
-- All configuration is done in the Settings tab; no YAML to edit
+The One RFID and Granary feeders dispense through a fixed-volume scoop rather than a scale, so one "portion" doesn't weigh the same for every food. By default I assume 10g per portion, and an optional calibration wizard on the Schedule tab shows real grams or ounces for your food. It only changes how amounts are *displayed*. The steps are in [Features](docs/features.md#feed-amount-calibration-optional).
 
 ---
 
 ## Requirements
 
+- **The official Petlibro app, once**: to put a new device on your Wi-Fi in the first place. After that, nothing needs the app or the cloud.
 - **Home Assistant OS** or **Home Assistant Supervised**: the Supervisor is required for app installation and the Supervisor API access the credential capture flow depends on.
-- **Mosquitto broker app** (`core_mosquitto`): must be installed and running before Petlibro Local is installed. The app manages Mosquitto logins and stops/starts Mosquitto during credential capture.
+- **Mosquitto broker app** (`core_mosquitto`): must be installed and running before Petlibro Local is installed. The app manages Mosquitto logins and stops/starts Mosquitto during credential capture (which reboots your devices for a minute or two, see [Restarting Mosquitto Reboots Your Devices](#restarting-mosquitto-reboots-your-devices)).
 - **Local DNS override**: the hostname `mqtt.us.petlibro.com` must resolve to your Home Assistant IP on your local network. Pi-hole, AdGuard Home, and most router DNS overrides work. Without this, devices will continue connecting to the Petlibro cloud.
 
 ---
@@ -253,8 +149,6 @@ debug: false
 
 ## Installation
 
-### Via App Store (Recommended)
-
 1. In Home Assistant go to **Settings → Apps → Install App**
 2. Click the **⋮** menu (top right) and select **Repositories**
 3. Click **+ Add** (bottom right corner)
@@ -275,39 +169,19 @@ Once the repository is added:
 
 ## Adding a Device
 
+First set up your DNS override and read the notes on keeping devices on your local broker, then use Auto Setup. The full DNS steps, router tips and the Mosquitto restart behavior are in [Networking](docs/networking.md).
+
 ### DNS Setup
 
-Before adding any device, confirm your DNS override is in place. `mqtt.us.petlibro.com` must resolve to your Home Assistant IP on your local network.
-
-**Pi-hole:** In the Pi-hole web interface, go to **System > Settings > Local DNS Records**. Under "List of local DNS records", enter `mqtt.us.petlibro.com` in the Domain field and your Home Assistant IP in the Associated IP field. Click the "+" Icon, and the override is active immediately.
-
-**AdGuard Home:** Go to **Filters > DNS Rewrites**, click Add Rewrite, enter `mqtt.us.petlibro.com` as the domain and your HA IP as the answer.
-
-**Router-level DNS:** varies by router; check your router's documentation for "custom DNS records" or "local DNS override."
-
-You can verify the override is working from any device on your network:
-
-```
-nslookup mqtt.us.petlibro.com
-```
-
-The response should show your HA IP, not a Petlibro cloud address.
+`mqtt.us.petlibro.com` must resolve to your Home Assistant IP on your local network (Pi-hole: Local DNS Records, AdGuard Home: DNS Rewrites, or your router's custom DNS records). Check it with `nslookup mqtt.us.petlibro.com`. Step-by-step instructions are in [Networking](docs/networking.md#dns-setup).
 
 ### Keeping Devices on Local MQTT
 
-Petlibro firmware appears to cache the cloud broker's resolved IP address and will fall back to it directly, bypassing DNS entirely, if the local broker is unavailable even briefly (for example, during a Mosquitto restart). A DNS override alone may not be enough to keep the device on your local broker permanently.
+Petlibro firmware appears to cache the cloud broker's IP address and falls back to it directly, bypassing DNS, if your local broker is unavailable even briefly. The most reliable fix is to **block the device from the internet** at your router. Some firmware never looks up the broker name at all, which needs a source-based NAT rule instead, and one firmware also asks a second DNS server (`8.8.4.4`). The details and the router rule are in [Networking](docs/networking.md#keeping-devices-on-local-mqtt).
 
-The most reliable solution is to **block the device from accessing the internet entirely** at your router or firewall. With no route to the Petlibro cloud, the device has no fallback and stays on your local Mosquitto broker. Petlibro devices do not need internet access once they are on a local broker; all telemetry, commands, and heartbeats flow over MQTT on your LAN. Most routers let you block individual devices by MAC address under a firewall or access control section. Google can likely assist, please do not open issues on router support. 
+### Restarting Mosquitto Reboots Your Devices
 
-**If a device never picks up the DNS override at all:** a user-submitted packet capture confirmed that at least one hardware/firmware combination (One RFID Smart Feeder, `fw 2.0.47, hw 4.0.0`) never performs a DNS lookup for the broker, ever. Every reconnect goes straight to one of roughly a dozen cached/anycast cloud IPs, so a DNS override has nothing to intercept, it's simply never asked. If you suspect your device is doing this (Auto Setup capture never triggers, or a device that was working stops picking up a DNS change), a source-based NAT rule at your router works regardless of which cached IP the device dials:
-
-```
--s <feeder-ip>/32 -p tcp --dport 1883 -j DNAT --to-destination <home-assistant-ip>:1883
-```
-
-This redirects that specific device's MQTT traffic to your Home Assistant IP no matter which destination it tries to reach. Most routers running iptables/nftables (UniFi, OPNsense, pfSense, etc.) support this; consult your router's documentation for source-based DNAT or port redirection. If your inter-VLAN firewall is allow-list style, remember the redirected packet still needs to be allowed through to the broker host/port, DNAT happens before filtering.
-
-**If a device has a backup battery installed and doesn't reconnect after a normal power cycle:** try removing the battery too, not just cutting AC power. This is based on limited testing, not fully confirmed, but a battery-backed unit may survive a brief power interruption without doing a genuine firmware reboot, in which case it just resumes whatever connection it already had instead of re-evaluating anything. Removing the battery forces a true cold boot.
+In my testing, every time the Mosquitto broker restarts, the feeders and fountains reboot themselves and reconnect within a minute or two. That is firmware behavior, not something this app controls. Avoid restarting Mosquitto (or adding or removing a device here, which restarts it) near a feeding time. Restarting Home Assistant or Petlibro Local did not reboot my feeder. The full explanation, including what happens to the feeder's clock, is in [Networking](docs/networking.md#restarting-mosquitto-reboots-your-devices).
 
 ### Auto Setup (Recommended)
 
@@ -318,9 +192,15 @@ This redirects that specific device's MQTT traffic to your Home Assistant IP no 
 5. When the device reconnects, credentials are captured automatically. The serial number and device type fill in from the captured data.
 6. Pick the correct color variant, enter a display name and room, and tap **Add Device**.
 
+Auto Setup stops Mosquitto for up to 60 seconds and reboots your devices (see above), so avoid it near a feeding time.
+
+> **Tip:** If the app detects the device successfully but it still isn't connecting to Mosquitto afterward, try triggering the Wi-Fi reconnect in the Petlibro app a second time. Some devices need two reconnect attempts before they fully switch over to the local broker. Blocking the device from the internet may help too.
+
 > ⚠️ **If other MQTT clients connect during capture** (camera systems, home automation bridges): the app filters by Petlibro serial number prefixes and ignores non-Petlibro clients. Capture continues until the Petlibro device connects or the 60-second timeout expires.
 
 ### Manual Setup
+
+For cases where you already have the MQTT username and password (for example, from MQTT Explorer during a previous capture).
 
 1. Open Petlibro Local and tap **Add Device**.
 2. Select **Manual Setup**.
@@ -332,62 +212,7 @@ This redirects that specific device's MQTT traffic to your Home Assistant IP no 
 
 ## Home Assistant MQTT Discovery
 
-Petlibro Local automatically publishes MQTT discovery messages so Home Assistant creates entities for every device. No configuration is required; entities appear as soon as the app connects to Mosquitto and HA's MQTT integration is enabled.
-
-### Requirements
-
-- The **MQTT integration** must be enabled in Home Assistant (*Settings → Devices & Services → + Add integration → MQTT*). If you already have Mosquitto set up, you likely have this.
-- Both the app and HA's MQTT integration must point to the same Mosquitto broker.
-
-### Feeder Entities (One RFID Smart Feeder)
-
-| Entity | Type | Description |
-|--------|------|-------------|
-| Feed Now | Button | Dispenses one portion immediately |
-| Open Door | Button | Opens the feeder lid on demand |
-| Volume | Number (slider) | Speaker volume 0–100 |
-| Food Door | Binary Sensor | Open/closed state of the feeder lid |
-| Last Fed | Sensor | Timestamp of the last dispense or detected eating session (the Granary Smart Feeder has this sensor too, dispense only) |
-| Last Eating Duration | Sensor | Duration in seconds of the last qualifying feeder door session, RFID or manual |
-| Next Meal | Sensor | Timestamp of the next enabled scheduled feeding |
-| Desiccant Days Remaining | Sensor (diagnostic) | Days until desiccant replacement is due |
-| Firmware Version | Sensor (diagnostic) | Current firmware version string |
-| Hardware Version | Sensor (diagnostic) | Hardware revision string |
-| Signal Strength | Sensor (diagnostic) | WiFi RSSI in dBm |
-| Clock Offset | Sensor (diagnostic) | Seconds the device's own clock is behind real time (negative if ahead). Petlibro Local sends a time correction on its own if this passes 30 seconds, so it normally sits near zero |
-
-**Last Fed** updates automatically when food is dispensed, and also when the feeder door closes after being open for at least the minimum eating duration. That threshold defaults to 30 seconds and is adjustable per device in Edit Device → Minimum Eating Duration.
-
-**Next Meal** reflects the next enabled plan from the feeding schedule, recalculated on every device heartbeat.
-
-### Fountain Entities (Dockstream 2)
-
-| Entity | Type | Description |
-|--------|------|-------------|
-| Pump | Switch | Pump on/off (waterStopSwitch, inverted) |
-| Light | Switch | LED ring light on/off |
-| Water Level | Sensor | Current water level in mL |
-| Filter Days Remaining | Sensor (diagnostic) | Days until filter replacement is due |
-| Battery | Sensor | Battery percentage (Cordless model only) |
-| Firmware Version | Sensor (diagnostic) | Current firmware version string |
-| Hardware Version | Sensor (diagnostic) | Hardware revision string |
-| Signal Strength | Sensor (diagnostic) | WiFi RSSI in dBm |
-| Clock Offset | Sensor (diagnostic) | Seconds the device's own clock is behind real time (negative if ahead). Petlibro Local sends a time correction on its own if this passes 30 seconds, so it normally sits near zero |
-
-Applies to the Dockstream RFID Smart Fountain as well. That model additionally reports which pet's RFID tag was present during a drink, logged and attributed to that pet in its Recent Activity the same way the One RFID Smart Feeder attributes eating sessions.
-
-**Firmware Version and Hardware Version** only populate after a device sends its boot event, the only time it reports these, so a device that hasn't rebooted since you added it may show blank until its next power cycle or reconnect.
-
-### Automations and Voice Assistants
-
-Because the entities appear in HA like any other integration, they work everywhere HA does:
-
-- **Alexa / Google Home**: expose the Feed Now button or Pump switch via your preferred voice assistant integration
-- **Automations**: trigger a feeding when motion is detected near the feeder, alert when water level drops below a threshold, or turn the pump off overnight
-- **Dashboards**: add any entity to a Lovelace card
-- **History**: all sensor values are tracked in HA's history and statistics
-
-Entity IDs are stable and based on the device serial number, so they survive device renames and room reassignments.
+Petlibro Local automatically publishes MQTT discovery messages so Home Assistant creates entities for every device, with no configuration. The MQTT integration must be enabled in Home Assistant, pointing at the same Mosquitto broker as the app. The feeder, Granary and fountain entity tables, notes on each entity, and an automation example for playing an LED animation are in [Home Assistant entities](docs/entities.md).
 
 ---
 
@@ -421,12 +246,11 @@ No. The PetLibro app pairing lives in PetLibro's cloud; your device serial is ti
 
 AdGuard Home and Pi-hole both work fine. BIND, AdGuard, and Pi-hole all do the same thing here: a simple A record override. BIND's additional capabilities (reverse lookup, zone files) are not needed and offer no benefit for this setup.
 
-**What happens if the app or Mosquitto restarts? Do I lose device control?**
+**What happens if the app, Home Assistant, or Mosquitto restarts? Do I lose device control?**
 
-Devices reconnect automatically within a few seconds of Mosquitto coming back up. Configuration and pet profiles are stored in the HA Supervisor data directory and are included in standard Home Assistant backups.
+Restarting Petlibro Local or Home Assistant itself doesn't affect your devices, since they only talk to Mosquitto. Restarting **Mosquitto** does: in my testing the feeders and fountains reboot themselves and come back within a minute or two. That is firmware behavior, newer firmware may well behave differently, and the details are in [Restarting Mosquitto Reboots Your Devices](#restarting-mosquitto-reboots-your-devices). Either way, configuration and pet profiles are stored in the Home Assistant Supervisor data directory and are included in standard Home Assistant backups.
 
 ---
-
 
 ## Contributing
 
@@ -457,6 +281,12 @@ Pull requests are welcome. A few things to keep in mind before opening one.
 
 Device data structures, API field names, and device class patterns were informed by the [ha_petlibro](https://github.com/jjjonesjr33/ha_petlibro) Home Assistant integration by [@jjjonesjr33](https://github.com/jjjonesjr33) and contributors. That project reverse-engineered the Petlibro cloud API and documents the device property model that made this local MQTT app possible. If you want cloud-based control alongside or instead of local control, that integration is the place to start.
 
+Thanks to [@MechanicalCoderX](https://github.com/MechanicalCoderX) for responsibly reporting a security issue (fixed in v2026.09.5), for packet-level findings on how some older feeder firmware connects, and for bug reports that led to several fixes.
+
+Thanks also to [@Tp-danny](https://github.com/Tp-danny) for the Granary Smart Feeder capture and for testing feed amount calibration with a real scale, and to [@avgizmo](https://github.com/avgizmo), [@jemp](https://github.com/jemp) and [@JamieSBenson](https://github.com/JamieSBenson) for the logs and reports that helped track down the delayed-feeding problem.
+
+Thanks to Reddit user u/ski_infection for a detailed analysis of how the One RFID feeder reboots and keeps its clock, and for notes on its LED display protocol and time-sync messages, which shaped the clock handling and the LED animations.
+
 ---
 
 ## Dedicated to Kaylee
@@ -476,7 +306,7 @@ This project is dedicated to Kaylee, the sweetest, gentlest dog. I'll miss you u
 ## Keywords
 
 **Devices:** Petlibro, Dockstream, smart fountain, pet water fountain, pet feeder, RFID feeder  
-**Features:** local MQTT, no cloud, credential capture, water level, filter days, pump control, light control, MQTT discovery, HA entities, automations, Alexa, feed now, last fed, next meal, volume control  
+**Features:** local MQTT, no cloud, credential capture, water level, filter days, pump control, light control, MQTT discovery, HA entities, automations, Alexa, feed now, last fed, next meal, volume control, LED animations  
 **Software:** Home Assistant, Home Assistant app, Supervisor, Mosquitto, MQTT, local control
 
 <!-- 

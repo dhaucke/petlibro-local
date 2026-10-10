@@ -40,6 +40,14 @@ _ICON_NAMES: dict[str, int] = {
 }
 _ICON_IDS: dict[int, str] = {v: k for k, v in _ICON_NAMES.items()}
 
+# Home Assistant's MQTT select treats a state payload of "None" as "reset to
+# unknown", so an option literally named "None" can never be shown as the
+# current state (the entity just reads "unknown"). These are the labels used in
+# the option lists and state topics instead; the old "None" is still accepted
+# as a command (anything that is not a known icon or animation means "stop").
+NO_ICON_LABEL = "No icon"
+NO_ANIMATION_LABEL = "No animation"
+
 # Frames for icons with id -1 (custom frames, not stored in display_matrix)
 _CUSTOM_FRAMES: dict[str, list] = {
     "Petlibro Salute": [0, 128 << 7, 128 << 7, 448 << 7, 480 << 7, 224 << 7, 0],
@@ -53,6 +61,21 @@ _CUSTOM_FRAMES: dict[str, list] = {
 # option here too, or HA logs "Invalid option for select..." every time one
 # gets sent (a real bug, caught 2026-09-11).
 _STOCK_PRESET_NAMES = ["Heart (stock)", "Dog (stock)", "Cat (stock)", "Elk (stock)"]
+# These are no longer offered as separate options (they duplicated Heart, Dog,
+# Cat and Elk in the dropdown); a stock preset sent from the Icon Editor is
+# reported as its plain built-in name instead, see publish_state.
+
+
+def animation_option_names() -> list[str]:
+    """"None" (stop, back to the saved text) plus the built-in animations and
+    the user's saved ones, in that order, without duplicates."""
+    import animations
+    import storage
+    names = [NO_ANIMATION_LABEL]
+    for n in [p["name"] for p in animations.PRESETS] + [a["name"] for a in storage.get_custom_animations()]:
+        if n not in names:
+            names.append(n)
+    return names
 
 
 # ── Topic helpers ──────────────────────────────────────────────────────────
@@ -305,9 +328,27 @@ def _entity_configs(serial: str, cfg: dict, state: dict, extra_icon_names: list[
             "name":          "Display Icon",
             "state_topic":   state_topic(serial, "display_icon"),
             "command_topic": cmd_topic(serial, "display_icon"),
-            "options":       list(_ICON_NAMES.keys()) + _STOCK_PRESET_NAMES + (extra_icon_names or []),
+            "options":       [NO_ICON_LABEL] + [n for n in _ICON_NAMES if n != "None"] + (extra_icon_names or []),
             "optimistic":    True,
             "icon":          "mdi:emoticon-outline",
+        })))
+
+        entities.append(("switch", "display_switch", _e(serial, "display_switch", b, {
+            "name":          "LED Display",
+            "state_topic":   state_topic(serial, "display_switch"),
+            "command_topic": cmd_topic(serial, "display_switch"),
+            "payload_on":    "ON",
+            "payload_off":   "OFF",
+            "icon":          "mdi:led-strip-variant",
+        })))
+
+        entities.append(("select", "display_animation", _e(serial, "display_animation", b, {
+            "name":          "Display Animation",
+            "state_topic":   state_topic(serial, "display_animation"),
+            "command_topic": cmd_topic(serial, "display_animation"),
+            "options":       animation_option_names(),
+            "optimistic":    True,
+            "icon":          "mdi:movie-open-outline",
         })))
 
     # ── Granary Smart Feeder (no RFID, no lid) ───────────────────────────────
@@ -434,6 +475,8 @@ def get_command_topics(serial: str, device_type: str) -> list[str]:
         topics.append(cmd_topic(serial, "volume"))
         topics.append(cmd_topic(serial, "display_text"))
         topics.append(cmd_topic(serial, "display_icon"))
+        topics.append(cmd_topic(serial, "display_animation"))
+        topics.append(cmd_topic(serial, "display_switch"))
     elif device_type == "granary":
         topics.append(cmd_topic(serial, "feed_now"))
         topics.append(cmd_topic(serial, "volume"))
@@ -480,6 +523,9 @@ def _next_meal_ts(plans: list) -> str | None:
             )
             if candidate <= now:
                 continue
+            skip_end = plan.get("skipEndTime")
+            if isinstance(skip_end, (int, float)) and candidate.timestamp() * 1000 < skip_end:
+                continue  # this occurrence is skipped, look at the plan's next day
             if best is None or candidate < best:
                 best = candidate
             break  # found closest future occurrence for this plan
@@ -557,8 +603,10 @@ async def publish_state(client, serial: str, cfg: dict, state: dict, plans: list
             # HA logs "Invalid state message" for it (real, confirmed
             # 2026-09-12). Only publish when there's an actual upcoming feed,
             # same convention as last_fed/last_drink below.
-            if next_ts:
-                await client.publish(state_topic(serial, "next_meal"), next_ts, retain=True)
+            # With no upcoming feed (schedules paused, all disabled or deleted)
+            # the retained old value would otherwise stay forever. Home
+            # Assistant's MQTT sensor resets to unknown on the payload "None".
+            await client.publish(state_topic(serial, "next_meal"), next_ts or "None", retain=True)
 
         last_desiccant = cfg.get("last_desiccant_ts")
         if last_desiccant:
@@ -579,7 +627,26 @@ async def publish_state(client, serial: str, cfg: dict, state: dict, plans: list
         await client.publish(state_topic(serial, "display_text"), display_text[:20], retain=True)
 
         icon_name = cfg.get("display_icon_name") or _ICON_IDS.get(cfg.get("display_icon", 0), "None")
+        if icon_name in _STOCK_PRESET_NAMES:
+            icon_name = icon_name[:-len(" (stock)")]
+        # The select only accepts its own options; the Icon Editor can send an
+        # unsaved drawing under whatever name was typed, which Home Assistant
+        # would show as "unknown". Report None for anything not in the list.
+        import storage as _storage
+        if icon_name not in _ICON_NAMES and icon_name not in {ic["name"] for ic in _storage.get_custom_icons()}:
+            icon_name = "None"
+        if icon_name == "None":
+            icon_name = NO_ICON_LABEL
         await client.publish(state_topic(serial, "display_icon"), icon_name, retain=True)
+        # The setting (screenDisplaySwitch), not enableScreenDisplay, which is
+        # whether the LED is lit right now and goes false outside a custom window.
+        disp = state.get("screenDisplaySwitch", state.get("enableScreenDisplay"))
+        if disp is not None:
+            await client.publish(state_topic(serial, "display_switch"), "ON" if disp else "OFF", retain=True)
+        anim_name = cfg.get("display_animation_name") or NO_ANIMATION_LABEL
+        if anim_name not in animation_option_names():
+            anim_name = NO_ANIMATION_LABEL
+        await client.publish(state_topic(serial, "display_animation"), anim_name, retain=True)
 
     # Granary Smart Feeder (no RFID, no lid, no display -- see device_types
     # module docstring for what's deliberately not implemented and why)
@@ -598,8 +665,10 @@ async def publish_state(client, serial: str, cfg: dict, state: dict, plans: list
             # HA logs "Invalid state message" for it (real, confirmed
             # 2026-09-12). Only publish when there's an actual upcoming feed,
             # same convention as last_fed/last_drink below.
-            if next_ts:
-                await client.publish(state_topic(serial, "next_meal"), next_ts, retain=True)
+            # With no upcoming feed (schedules paused, all disabled or deleted)
+            # the retained old value would otherwise stay forever. Home
+            # Assistant's MQTT sensor resets to unknown on the payload "None".
+            await client.publish(state_topic(serial, "next_meal"), next_ts or "None", retain=True)
 
         last_desiccant = cfg.get("last_desiccant_ts")
         if last_desiccant:
@@ -667,4 +736,8 @@ def parse_command(topic: str, payload: str, device_type: str = "") -> dict | Non
         return {"_display_text": payload[:20]}
     if key == "display_icon":
         return {"_display_icon": payload}
+    if key == "display_animation":
+        return {"_display_animation_name": payload}
+    if key == "display_switch":
+        return {"_display_switch": payload == "ON"}
     return None

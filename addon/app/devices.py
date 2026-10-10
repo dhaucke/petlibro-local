@@ -66,6 +66,33 @@ CLOCK_OFFSET_THRESHOLD_SECS = 30
 CLOCK_CORRECTION_MIN_INTERVAL_SECS = 300   # at most one correction push per device per 5 min
 CLOCK_CORRECTION_MAX_TRIES = 3             # give up after this many pushes that don't fix it
 CLOCK_CORRECTION_BACKOFF_SECS = 3600       # then leave the device alone for an hour
+# A feeder only fires a meal when its own clock reaches that exact second, with
+# no catching up (reported by a Reddit user from direct tests, plus one real
+# 9-minute-late feed here). So a correction that jumps the clock over a meal
+# time is not harmless: forward over a due meal SKIPS it, backward over a meal
+# already fed (a fast clock feeds early) feeds it AGAIN. Corrections are held
+# while that would happen. A slow clock is held at most this long (the meal then
+# fires late instead of being skipped), after which the correction goes ahead
+# and the owner is notified which feed(s) were skipped. A fast clock is never
+# forced: waiting only costs a wrong clock, jumping back can double-feed.
+CLOCK_SLOW_HOLD_MAX_SECS = 3600
+# A few seconds of margin on both ends of the window: a feeder applies a new
+# time almost instantly (a Reddit user measured ~0.13s) but not literally
+# instantly, so a meal right at the edge of the jump is treated as inside it.
+CLOCK_HOLD_SLACK_SECS = 5
+
+# Cloud-style time sync (OBSERVED 2026-10-09 on a One RFID, fw 3.0.72): the real
+# cloud sends the feeder an unprompted NTP_SYNC on connect, the feeder acks it
+# with its new clock, and it answers the feeder's own NTP request with
+# calibrationTag true only when that request's clock was off. With this on, a
+# One RFID gets the same: calibrationTag false when its clock is fine or a
+# correction must be held, true plus an NTP_SYNC when it is off and safe to
+# jump. Set False to restore the old behavior (always calibrationTag true).
+# Types limited to the one actually captured; the Granary and fountains keep
+# the old path until their real-cloud behavior is seen.
+USE_CLOUD_STYLE_TIME_SYNC = True
+CLOUD_TIME_SYNC_TYPES = ("one_rfid",)
+NTP_SYNC_ACK_TIMEOUT_SECS = 10
 
 # Dedicated log file for NTP request/response/push activity, separate from
 # the main add-on log, so a multi-day observation window (see issue #5)
@@ -123,6 +150,12 @@ _pet_no_eat_alerted: dict[str, bool] = {}
 # a stale offset resurrected after a restart would be misleading.
 _clock_offset: dict[str, int] = {}
 _clock_fix_state: dict[str, dict] = {}
+# Last audioUrl each device reported. Kept out of _state on purpose (sensitive,
+# never shown in the UI) but resent with sound-hours changes so they cannot
+# clobber a custom sound.
+_audio_urls: dict[str, str] = {}
+# msgId -> (serial, device_type) for NTP_SYNC messages awaiting the device's ack
+_ntp_sync_pending: dict[str, tuple] = {}
 _last_reconnect_push: dict[str, float] = {}
 # Missed-feed watchdog (see _check_missed_feeds). In-memory only on purpose:
 # it can only judge feeds it was watching, so it never looks back past the
@@ -233,7 +266,10 @@ def _mark_online(serial: str):
                 # fountains have their own schedule-dependent behavior too
                 # (the light schedule, and cordless models' run schedule),
                 # so any device type benefits from an accurate clock.
-                if _last_seen[serial] - _last_reconnect_push.get(serial, 0.0) >= RECONNECT_PUSH_COOLDOWN_SECS:
+                # Feeders are left to _check_device_clock on the next heartbeat
+                # (about a minute away), which holds the correction if it would
+                # skip or repeat a meal. A blind push here could not tell.
+                if device_type not in ("one_rfid", "granary") and _last_seen[serial] - _last_reconnect_push.get(serial, 0.0) >= RECONNECT_PUSH_COOLDOWN_SECS:
                     _last_reconnect_push[serial] = _last_seen[serial]
                     asyncio.ensure_future(_push_ntp_sync(serial, device_type))
 
@@ -284,6 +320,10 @@ def _mqtt_model(device_type: str) -> str:
 
 def _service_sub_topic(device_type: str, serial: str) -> str:
     return f"dl/{_mqtt_model(device_type)}/{serial}/device/service/sub"
+
+
+def _ntp_sub_topic(device_type: str, serial: str) -> str:
+    return f"dl/{_mqtt_model(device_type)}/{serial}/device/ntp/sub"
 
 
 def _event_sub_topic(device_type: str, serial: str) -> str:
@@ -426,6 +466,59 @@ async def send_display(serial: str, display_text: str, display_icon: int) -> boo
         return False
 
 
+async def send_display_frames(serial: str, frames: list, interval: int = 4, loop: bool = True) -> bool:
+    """Push a multi-frame animation to the feeder's idle LED screen.
+
+    Format from a Reddit reporter's spec (unverified here until tested on a
+    real feeder): frames go 20 per message, longer animations as several
+    messages with the SAME msgId, subNum = message count, subIndex = 0..n-1,
+    screenDisplayNumber = total frames; about a second between messages;
+    screenDisplayInterval is the speed. At most 140 frames (more corrupts the
+    pet-name buffer). Sending text again overwrites the animation."""
+    global _client_ref
+    import time
+    import animations as anim
+    if serial not in _devices:
+        return False
+    if not anim.validate_frames(frames):
+        _LOGGER.warning("send_display_frames: rejected invalid frames for %s...", serial[:6])
+        return False
+    _, device_type = _devices[serial]
+    topic = _service_sub_topic(device_type, serial)
+    if _client_ref is None:
+        return False
+    interval = max(1, min(10, int(interval)))
+    n = len(frames)
+    chunks = [frames[i:i + 20] for i in range(0, n, 20)]
+    ts = int(time.time() * 1000)
+    msg_id = f"{serial}_{ts}"
+    try:
+        for idx, chunk in enumerate(chunks):
+            envelope = {
+                "cmd": "DISPLAY_MATRIX_SERVICE",
+                "ts": ts,
+                "msgId": msg_id,
+                "screenDisplayMatrix": chunk,
+                "screenDisplayNumber": n,
+                "screenDisplayId": 0,
+                "screenDisplayInterval": interval,
+                "displayScene": "USER_CUSTOM",
+                "subNum": len(chunks),
+                "subIndex": idx,
+            }
+            if loop and n > 1:
+                envelope["loopDisplay"] = True
+            await _client_ref.publish(topic, json.dumps(envelope))
+            if idx < len(chunks) - 1:
+                await asyncio.sleep(1.0)
+        _LOGGER.info("Animation sent to %s...: %d frames, %d messages, interval %d, loop=%s",
+                     serial[:6], n, len(chunks), interval, loop)
+        return True
+    except Exception:
+        _LOGGER.exception("Failed to send animation to %s...", serial[:6])
+        return False
+
+
 async def send_display_frame(serial: str, frame: list) -> bool:
     """Push a raw DISPLAY_MATRIX_SERVICE frame to the feeder (custom icon)."""
     global _client_ref
@@ -459,6 +552,23 @@ async def send_display_frame(serial: str, frame: list) -> bool:
         return False
 
 
+def _wire_plans(plans: list) -> list:
+    """Plans as the feeder should get them: enabled only, our _enabled flag
+    removed, a skipEndTime dropped once it is in the past, sorted by time."""
+    import time as _t
+    now_ms = _t.time() * 1000
+    out = []
+    for p in plans:
+        if not p.get("_enabled", True):
+            continue
+        q = {k: v for k, v in p.items() if k != "_enabled"}
+        if isinstance(q.get("skipEndTime"), (int, float)) and q["skipEndTime"] <= now_ms:
+            q.pop("skipEndTime")
+        out.append(q)
+    out.sort(key=lambda p: p.get("executionTime", "00:00"))
+    return out
+
+
 async def send_feeding_plans(serial: str, plans: list) -> bool:
     """Push FEEDING_PLAN_SERVICE to feeder with the given plans (enabled only, _enabled stripped)."""
     global _client_ref
@@ -471,8 +581,10 @@ async def send_feeding_plans(serial: str, plans: list) -> bool:
     if _client_ref is None:
         _LOGGER.warning("send_feeding_plans: no MQTT client")
         return False
-    clean = [{k: v for k, v in p.items() if k != "_enabled"} for p in plans if p.get("_enabled", True)]
-    clean.sort(key=lambda p: p.get("executionTime", "00:00"))
+    import storage as _storage
+    if _storage.schedules_paused(serial):
+        plans = []
+    clean = _wire_plans(plans)
     payload = json.dumps({
         "cmd":    "FEEDING_PLAN_SERVICE",
         "ts":     int(time.time() * 1000),
@@ -608,7 +720,7 @@ async def republish_ha_discovery(serial: str):
         import storage as _storage
         cfg   = _storage.get_devices().get(serial, {})
         state = _state.get(serial, {})
-        plans = _storage.get_device_feeding_plans(serial)
+        plans = _storage.get_active_feeding_plans(serial)
         custom_icon_names = [ic["name"] for ic in _storage.get_custom_icons()]
         await ha_mqtt.publish_discovery(_client_ref, serial, cfg, state, extra_icon_names=custom_icon_names)
         await ha_mqtt.publish_state(_client_ref, serial, cfg, state, plans=plans)
@@ -641,7 +753,7 @@ async def _publish_ha_state(serial: str):
         import storage as _storage
         cfg   = _storage.get_devices().get(serial, {})
         state = _state.get(serial, {})
-        plans = _storage.get_device_feeding_plans(serial)
+        plans = _storage.get_active_feeding_plans(serial)
         await ha_mqtt.publish_state(_client_ref, serial, cfg, state, plans=plans,
                                     clock_offset=_clock_offset.get(serial))
     except Exception:
@@ -649,6 +761,63 @@ async def _publish_ha_state(serial: str):
 
 
 # ── HA command handling ────────────────────────────────────────────────────
+
+async def _set_display_switch(serial: str, on: bool) -> bool:
+    """Turns the One RFID feeder's LED screen on or off with the same message the
+    Petlibro app sends. Used by both the web UI and the Home Assistant switch."""
+    import storage as _storage
+    cfg = _storage.get_devices().get(serial, {})
+    # Mirror the vendor app's own on/off message: it also carries audioUrl
+    # and soundTimes (OBSERVED), and the mode should be what the feeder
+    # itself last reported (the app may have changed it), not our guess.
+    aging = _state.get(serial, {}).get("screenDisplayAgingType")
+    if aging not in (1, 2):
+        aging = 2 if cfg.get("display_hours_mode") == "custom" else 1
+    payload = {"screenDisplaySwitch": on, "screenDisplayAgingType": aging, "screenDisplayInterval": 2}
+    s_start, s_end = cfg.get("sound_start_local"), cfg.get("sound_end_local")
+    if s_start and s_end:
+        payload["soundTimes"] = _raw_minutes_between(s_start, s_end)
+    elif isinstance(_state.get(serial, {}).get("soundTimes"), int):
+        payload["soundTimes"] = _state[serial]["soundTimes"]
+    if _audio_urls.get(serial):
+        payload["audioUrl"] = _audio_urls[serial]
+    _LOGGER.info("Display switch %s... sending %s", serial[:6],
+                 {k: v for k, v in payload.items() if k != "audioUrl"})
+    ok = await send_command(serial, payload)
+    if ok:
+        _state.setdefault(serial, {}).update({"screenDisplaySwitch": on, "enableScreenDisplay": on})
+        asyncio.ensure_future(_publish_ha_state(serial))
+    return ok
+
+
+async def _play_animation_by_name(serial: str, name: str) -> bool:
+    """Plays a built-in or saved animation by its name (the HA select's value).
+    "None" (or an unknown name) stops it by sending the saved text again."""
+    import animations
+    import storage as _storage
+    if name and name != "None":
+        entry = None
+        for a in _storage.get_custom_animations():
+            if a["name"] == name:
+                entry = {"frames": a["frames"], "interval": a.get("interval", animations.DEFAULT_INTERVAL)}
+                break
+        if entry is None:
+            for p in animations.list_presets():
+                if p["name"] == name:
+                    entry = p
+                    break
+        if entry is not None:
+            ok = await send_display_frames(serial, entry["frames"], entry["interval"], True)
+            if ok:
+                _storage.save_device(serial, {"display_animation_name": name, "display_icon_name": None, "display_icon": 0})
+            asyncio.ensure_future(_publish_ha_state(serial))
+            return ok
+    cfg = _storage.get_devices().get(serial, {})
+    _storage.save_device(serial, {"display_animation_name": None})
+    ok = await send_display(serial, cfg.get("display_text", ""), 0) if cfg.get("display_text") else True
+    asyncio.ensure_future(_publish_ha_state(serial))
+    return ok
+
 
 async def _handle_ha_command(serial: str, topic: str, payload: str):
     """Route an HA MQTT command to the device."""
@@ -667,7 +836,7 @@ async def _handle_ha_command(serial: str, topic: str, payload: str):
         text = cmd["_display_text"][:20]
         if text:
             import storage as _storage
-            _storage.save_device(serial, {"display_text": text, "display_icon": 0, "display_icon_name": None})
+            _storage.save_device(serial, {"display_animation_name": None, "display_text": text, "display_icon": 0, "display_icon_name": None})
             ok = await send_display(serial, text, 0)
             asyncio.ensure_future(_publish_ha_state(serial))
             _LOGGER.info("HA Display Text %s...: %s", serial[:6], "ok" if ok else "failed")
@@ -676,26 +845,32 @@ async def _handle_ha_command(serial: str, topic: str, payload: str):
         icon_name = cmd["_display_icon"]
         icon_id = ha_mqtt._ICON_NAMES.get(icon_name, None)
         if icon_id is not None and icon_id > 0:
-            _storage.save_device(serial, {"display_icon": icon_id, "display_text": "", "display_icon_name": icon_name})
+            _storage.save_device(serial, {"display_animation_name": None, "display_icon": icon_id, "display_text": "", "display_icon_name": icon_name})
             ok = await send_display(serial, "", icon_id)
         elif icon_name in ha_mqtt._CUSTOM_FRAMES:
             # Built-in custom frame (e.g. Petlibro Salute)
-            _storage.save_device(serial, {"display_icon": icon_id or -1, "display_icon_name": icon_name})
+            _storage.save_device(serial, {"display_animation_name": None, "display_icon": icon_id or -1, "display_icon_name": icon_name})
             ok = await send_display_frame(serial, ha_mqtt._CUSTOM_FRAMES[icon_name])
         else:
             # Check user-saved custom icons by name
             saved = {ic["name"]: ic for ic in _storage.get_custom_icons()}
             if icon_name in saved:
                 frame = [0] + [r << 7 for r in saved[icon_name]["rows"]] + [0]
-                _storage.save_device(serial, {"display_icon_name": icon_name, "display_icon": 0})
+                _storage.save_device(serial, {"display_animation_name": None, "display_icon_name": icon_name, "display_icon": 0})
                 ok = await send_display_frame(serial, frame)
             else:
                 # "None" — revert to stored text
                 cfg = _storage.get_devices().get(serial, {})
-                _storage.save_device(serial, {"display_icon": 0, "display_icon_name": None})
+                _storage.save_device(serial, {"display_animation_name": None, "display_icon": 0, "display_icon_name": None})
                 ok = await send_display(serial, cfg.get("display_text", ""), 0)
         asyncio.ensure_future(_publish_ha_state(serial))
         _LOGGER.info("HA Display Icon %s... %s: %s", serial[:6], icon_name, "ok" if ok else "failed")
+    elif "_display_switch" in cmd:
+        ok = await _set_display_switch(serial, bool(cmd["_display_switch"]))
+        _LOGGER.info("HA Display Switch %s... -> %s: %s", serial[:6], bool(cmd["_display_switch"]), "ok" if ok else "failed")
+    elif "_display_animation_name" in cmd:
+        ok = await _play_animation_by_name(serial, cmd["_display_animation_name"])
+        _LOGGER.info("HA Display Animation %s... %s: %s", serial[:6], cmd["_display_animation_name"], "ok" if ok else "failed")
     elif "_display_frame" in cmd:
         frame = cmd["_display_frame"]
         if isinstance(frame, list) and len(frame) in (7, 8):
@@ -722,7 +897,7 @@ async def handle_ha_command(serial: str, cmd: dict) -> None:
         text = cmd["_display_text"][:20]
         if text:
             import storage as _storage
-            _storage.save_device(serial, {"display_text": text, "display_icon": 0, "display_icon_name": None})
+            _storage.save_device(serial, {"display_animation_name": None, "display_text": text, "display_icon": 0, "display_icon_name": None})
             ok = await send_display(serial, text, 0)
             asyncio.ensure_future(_publish_ha_state(serial))
             _LOGGER.info("API Display Text %s...: %s", serial[:6], "ok" if ok else "failed")
@@ -733,7 +908,7 @@ async def handle_ha_command(serial: str, cmd: dict) -> None:
             if ok:
                 import storage as _storage
                 name = cmd.get("_display_frame_name") or None
-                _storage.save_device(serial, {"display_icon_name": name, "display_icon": 0})
+                _storage.save_device(serial, {"display_animation_name": None, "display_icon_name": name, "display_icon": 0})
                 asyncio.ensure_future(_publish_ha_state(serial))
             _LOGGER.info("API Custom frame %s...: %s", serial[:6], "ok" if ok else "failed")
     elif "_light_schedule" in cmd:
@@ -790,6 +965,34 @@ async def handle_ha_command(serial: str, cmd: dict) -> None:
         ok = await send_command(serial, payload)
         asyncio.ensure_future(_publish_ha_state(serial))
         _LOGGER.info("API Light Schedule Enabled %s...: %s -> %s", serial[:6], enabled, "ok" if ok else "failed")
+    elif "_display_animation" in cmd:
+        a = cmd["_display_animation"] or {}
+        ok = await send_display_frames(serial, a.get("frames"), a.get("interval", 4), bool(a.get("loop", True)))
+        if ok:
+            import storage as _storage
+            import ha_mqtt as _ham
+            known = a.get("name") if a.get("name") in _ham.animation_option_names() else None
+            _storage.save_device(serial, {"display_icon_name": None, "display_icon": 0, "display_animation_name": known})
+            asyncio.ensure_future(_publish_ha_state(serial))
+        _LOGGER.info("API Animation %s...: %s", serial[:6], "ok" if ok else "failed")
+        if not ok:
+            raise RuntimeError("animation was not sent")
+    elif "_sound_hours" in cmd:
+        ok = await _send_feeder_hours(serial, "sound", cmd["_sound_hours"] or {})
+        _LOGGER.info("API Sound Hours %s...: %s", serial[:6], "ok" if ok else "failed")
+        if not ok:
+            raise RuntimeError("sound hours were not sent")
+    elif "_display_hours" in cmd:
+        ok = await _send_feeder_hours(serial, "screenDisplay", cmd["_display_hours"] or {})
+        _LOGGER.info("API Display Hours %s...: %s", serial[:6], "ok" if ok else "failed")
+        if not ok:
+            raise RuntimeError("display hours were not sent")
+    elif "_display_switch" in cmd:
+        on = bool(cmd["_display_switch"])
+        ok = await _set_display_switch(serial, on)
+        _LOGGER.info("API Display Switch %s... -> %s: %s", serial[:6], on, "ok" if ok else "failed")
+        if not ok:
+            raise RuntimeError("display switch was not sent")
     elif "_granary_field" in cmd:
         bundle = _granary_settings_bundle(serial, {cmd["_granary_field"]: cmd["_granary_value"]})
         ok = await send_command(serial, bundle)
@@ -813,7 +1016,13 @@ def _handle_message(serial: str, topic_str: str, raw: str):
     if cmd == "NTP":
         _LOGGER.info("NTP request from %s...", serial[:6])
         _ntp_logger.info("REQUEST from %s... (%s)", serial[:6], _device_name(serial))
-        asyncio.ensure_future(_respond_ntp(topic_str))
+        asyncio.ensure_future(_respond_ntp(topic_str, data.get("ts")))
+        _mark_online(serial)
+        return
+
+    if cmd == "NTP_SYNC":
+        # Device's ack of our NTP_SYNC (matched by msgId), carries its new clock.
+        _handle_ntp_sync_ack(serial, data)
         _mark_online(serial)
         return
 
@@ -898,7 +1107,11 @@ def _handle_message(serial: str, topic_str: str, raw: str):
                                        "rfid_tag": act_tag, "pet_id": pet_id},
                             )
                             # Auto-dismiss no-eat alert if one was firing
-                            if pet_id and _pet_no_eat_alerted.pop(pet_id, False):
+                            was_alerted = bool(pet_id and (_pet_no_eat_alerted.pop(pet_id, False)
+                                                           or pets.get(pet_id, {}).get("no_eat_alerted_for")))
+                            if was_alerted:
+                                _storage.save_pet(pet_id, {"no_eat_alerted_for": None})
+                            if was_alerted:
                                 try:
                                     import notifications as _notif2
                                     import storage as _st2
@@ -1048,6 +1261,12 @@ def _handle_message(serial: str, topic_str: str, raw: str):
         return
 
     if cmd == "DEVICE_START_EVENT":
+        # Boots go in the NTP log with their restartReason (e.g. "other:0x100000"),
+        # so the cause of a reboot can be judged from real data later. What the
+        # hex values mean (0x0 power on, 0x80000 firmware restart, 0x100000
+        # watchdog) is a Reddit user's reading, not confirmed here.
+        _ntp_logger.info("BOOT %s... (%s): restartReason=%s fw=%s",
+                         serial[:6], _device_name(serial), data.get("restartReason"), data.get("softwareVersion"))
         # Device just booted. This is the only event we've ever seen carry
         # softwareVersion/hardwareVersion, and until now nothing actually
         # stored them anywhere, so whatever version a modal showed was
@@ -1081,6 +1300,8 @@ def _handle_message(serial: str, topic_str: str, raw: str):
         return
 
     if cmd in ("ATTR_GET_SERVICE", "ATTR_SET_SERVICE", "ATTR_PUSH_EVENT"):
+        if isinstance(data.get("audioUrl"), str) and data["audioUrl"]:
+            _audio_urls[serial] = data["audioUrl"]
         skip    = _PROTO_FIELDS | _SENSITIVE_FIELDS
         if cmd == "ATTR_GET_SERVICE":
             # Every ATTR_GET_SERVICE response captured so far has shown
@@ -1092,6 +1313,12 @@ def _handle_message(serial: str, topic_str: str, raw: str):
             # initiated ATTR_PUSH_EVENT.
             skip = skip | {"powerType", "powerMode"}
         partial = {k: v for k, v in data.items() if k not in skip}
+        shown = {k: v for k, v in partial.items() if k.startswith("screenDisplay") or k == "enableScreenDisplay"}
+        if shown:
+            # OBSERVED: enableScreenDisplay is whether the LED is lit right now,
+            # screenDisplaySwitch is the setting. Logged so display changes can
+            # be checked against what the feeder reports back.
+            _LOGGER.info("%s from %s... display fields: %s", cmd, serial[:6], shown)
         if partial:
             _, device_type = _devices.get(serial, (None, None))
             mod       = _device_types.get(device_type) if device_type else None
@@ -1150,10 +1377,8 @@ async def _respond_feeding_plan(serial: str, request_topic: str) -> None:
     # Respond with GET_FEEDING_PLAN_EVENT + stored plans. Empty list is fine — feeder
     # will report code 2099 but runs its stored schedule autonomously.
     import storage as _storage
-    stored_plans = _storage.get_device_feeding_plans(serial)
-    clean_plans = [{k: v for k, v in p.items() if k != "_enabled"}
-                   for p in stored_plans if p.get("_enabled", True)]
-    clean_plans.sort(key=lambda p: p.get("executionTime", "00:00"))
+    stored_plans = _storage.get_active_feeding_plans(serial)
+    clean_plans = _wire_plans(stored_plans)
     payload = json.dumps({
         "cmd":   "GET_FEEDING_PLAN_EVENT",
         "code":  0,
@@ -1233,6 +1458,71 @@ def _minutes_between(start_hhmm: str, end_hhmm: str) -> int:
     sh, sm = (int(x) for x in start_hhmm.split(":"))
     eh, em = (int(x) for x in end_hhmm.split(":"))
     return ((eh * 60 + em) - (sh * 60 + sm)) % 1440
+
+
+def _raw_minutes_between(start_hhmm: str, end_hhmm: str) -> int:
+    """End minus start in minutes WITHOUT wrapping past midnight. The vendor
+    app's soundTimes is exactly this (OBSERVED: 11:51 to 00:51 sent -660,
+    08:51 to 00:51 sent -480, 08:51 to 01:51 sent -420)."""
+    sh, sm = (int(x) for x in start_hhmm.split(":"))
+    eh, em = (int(x) for x in end_hhmm.split(":"))
+    return (eh * 60 + em) - (sh * 60 + sm)
+
+
+async def _send_feeder_hours(serial: str, prefix: str, req: dict) -> bool:
+    """Device Sound hours (prefix "sound") and LED Display hours (prefix
+    "screenDisplay") on the One RFID Feeder, in the exact shapes captured from
+    the vendor app (2026-10-09). req = {"mode": "all"|"custom", "start", "end"}
+    with local HH:MM times. AgingType 1 = all day, 2 = custom time; the times
+    are kept in every message, as the app does, even for All day."""
+    import storage as _storage
+    mode_key, start_key, end_key = (("sound_hours_mode", "sound_start_local", "sound_end_local")
+                                    if prefix == "sound" else
+                                    ("display_hours_mode", "display_start_local", "display_end_local"))
+    cfg = _storage.get_devices().get(serial, {})
+    mode = "custom" if req.get("mode") == "custom" else "all"
+    start = req.get("start") or cfg.get(start_key)
+    end = req.get("end") or cfg.get(end_key)
+    if mode == "custom" and not (start and end):
+        return False
+    _storage.save_device(serial, {mode_key: mode, **({start_key: start, end_key: end} if start and end else {})})
+    fields = {f"{prefix}AgingType": 2 if mode == "custom" else 1}
+    if start and end:
+        fields.update({
+            f"{prefix}StartTime": start, f"{prefix}StartTimeUtc": _local_hhmm_to_utc(start),
+            f"{prefix}EndTime": end,     f"{prefix}EndTimeUtc": _local_hhmm_to_utc(end),
+        })
+        if prefix == "sound":
+            fields["soundTimes"] = _raw_minutes_between(start, end)
+    if prefix == "sound":
+        fields["soundSwitch"] = True
+        if _audio_urls.get(serial):
+            fields["audioUrl"] = _audio_urls[serial]
+    else:
+        fields["screenDisplayInterval"] = 2
+        if _audio_urls.get(serial):
+            fields["audioUrl"] = _audio_urls[serial]
+        s_start, s_end = cfg.get("sound_start_local"), cfg.get("sound_end_local")
+        if s_start and s_end:
+            fields["soundTimes"] = _raw_minutes_between(s_start, s_end)
+        # The app changes a custom window with two messages a second apart,
+        # switch off then on, identical schedule fields (the same pattern the
+        # fountain light schedule needed). Replicated for custom windows.
+        # The OEM app's All day changes were also off then on (OBSERVED 11:53:56
+        # and 11:54:00), so the pair is sent for both modes.
+        if True:
+            if not await send_command(serial, {**fields, "screenDisplaySwitch": False}):
+                return False
+            await asyncio.sleep(1)
+        fields["screenDisplaySwitch"] = True
+    _LOGGER.info("%s hours %s... sending %s", prefix, serial[:6], {k: v for k, v in fields.items() if k != "audioUrl"})
+    ok = await send_command(serial, fields)
+    if ok:
+        _state.setdefault(serial, {}).update({k: v for k, v in fields.items() if k != "audioUrl"})
+        if prefix == "screenDisplay":
+            _state[serial]["enableScreenDisplay"] = True
+        asyncio.ensure_future(_publish_ha_state(serial))
+    return ok
 
 
 def _local_hhmm_to_utc(hhmm: str) -> str:
@@ -1431,7 +1721,7 @@ def _dst_transitions(tz_name: str) -> list[tuple[int, int]]:
     return transitions
 
 
-def _build_ntp_payload() -> tuple[str, int]:
+def _build_ntp_payload(calibration: bool = True) -> tuple[str, int]:
     # NOTE: the timezone field here does NOT affect when scheduled plans fire.
     # executionTime in plans is always UTC (the PetLibro app converts local→UTC
     # before sending). This timezone is only used by the feeder for on-device
@@ -1468,7 +1758,7 @@ def _build_ntp_payload() -> tuple[str, int]:
         "cmd":            "NTP",
         "ts":             now_ms,
         "code":           0,
-        "calibrationTag": True,
+        "calibrationTag": calibration,
         "timezone":       tz_hours,
     }
     # Only include the fuller DST-aware fields when we have a real IANA zone to
@@ -1488,14 +1778,119 @@ def _build_ntp_payload() -> tuple[str, int]:
     return payload, now_ms
 
 
-async def _respond_ntp(request_topic: str) -> None:
+def _build_ntp_sync_payload() -> tuple[str, str, int]:
+    """The unprompted NTP_SYNC the real cloud sends on connect: the NTP reply
+    fields minus code/calibrationTag, plus msgId and linkId. Returns
+    (payload, msgId, ts_ms)."""
+    import uuid
+    base, now_ms = _build_ntp_payload()
+    d = json.loads(base)
+    d.pop("code", None)
+    d.pop("calibrationTag", None)
+    d["cmd"] = "NTP_SYNC"
+    msg_id = uuid.uuid4().hex
+    d["msgId"] = msg_id
+    d["linkId"] = uuid.uuid4().hex
+    return json.dumps(d), msg_id, now_ms
+
+
+def _uses_cloud_time_sync(serial: str) -> bool:
+    return USE_CLOUD_STYLE_TIME_SYNC and _devices.get(serial, (None, None))[1] in CLOUD_TIME_SYNC_TYPES
+
+
+async def _send_ntp_sync(serial: str, device_type: str) -> None:
+    """Sends the cloud-style NTP_SYNC and waits for the device's ack. If no ack
+    arrives within NTP_SYNC_ACK_TIMEOUT_SECS, falls back to the plain NTP push
+    that is known to work."""
+    global _client_ref
+    if _client_ref is None:
+        return
+    payload, msg_id, now_ms = _build_ntp_sync_payload()
+    _ntp_sync_pending[msg_id] = (serial, device_type)
+    try:
+        await _client_ref.publish(_ntp_sub_topic(device_type, serial), payload)
+        _ntp_logger.info("NTP_SYNC sent to %s... (%s): %s", serial[:6], _device_name(serial), payload)
+    except Exception:
+        _ntp_sync_pending.pop(msg_id, None)
+        _ntp_logger.exception("NTP_SYNC to %s... FAILED", serial[:6])
+        await _push_ntp_sync(serial, device_type)
+        return
+    await asyncio.sleep(NTP_SYNC_ACK_TIMEOUT_SECS)
+    if _ntp_sync_pending.pop(msg_id, None) is not None:
+        _ntp_logger.info("NTP_SYNC to %s... (%s) got no ack in %ds, falling back to the plain NTP push",
+                         serial[:6], _device_name(serial), NTP_SYNC_ACK_TIMEOUT_SECS)
+        await _push_ntp_sync(serial, device_type)
+
+
+async def _correct_clock(serial: str, device_type: str) -> None:
+    if _uses_cloud_time_sync(serial):
+        await _send_ntp_sync(serial, device_type)
+    else:
+        await _push_ntp_sync(serial, device_type)
+
+
+def _handle_ntp_sync_ack(serial: str, data: dict) -> None:
+    import time as _t
+    pending = _ntp_sync_pending.pop(data.get("msgId"), None)
+    ts = data.get("ts")
+    if isinstance(ts, (int, float)) and ts > 1e12:
+        offset = round(_t.time() - ts / 1000.0)
+        _clock_offset[serial] = offset
+        _ntp_logger.info("NTP_SYNC ack from %s... (%s) code=%s clock now %+ds%s", serial[:6], _device_name(serial),
+                         data.get("code"), offset, "" if pending else " (no matching request)")
+    else:
+        _ntp_logger.info("NTP_SYNC ack from %s... (%s) code=%s ts=%s", serial[:6], _device_name(serial),
+                         data.get("code"), ts)
+
+
+async def _respond_ntp(request_topic: str, device_ts_ms=None) -> None:
     global _client_ref
     if _client_ref is None:
         return
     response_topic = request_topic.replace("/post", "/sub")
-    payload, now_ms = _build_ntp_payload()
     parts = request_topic.split("/")
     serial = parts[2] if len(parts) > 2 else "?"
+    # Cloud-style reply (see USE_CLOUD_STYLE_TIME_SYNC): calibrationTag false
+    # unless the request's clock is off AND jumping it is safe.
+    calibration, send_sync = True, False
+    if (_uses_cloud_time_sync(serial) and isinstance(device_ts_ms, (int, float)) and device_ts_ms > 1e12):
+        import time as _t
+        req_offset = round(_t.time() - device_ts_ms / 1000.0)
+        _ntp_logger.info("NTP request from %s... (%s) carried a clock %+ds off",
+                         serial[:6], _device_name(serial), req_offset)
+        if abs(req_offset) <= CLOCK_OFFSET_THRESHOLD_SECS:
+            calibration = False
+        else:
+            reason, _ = _clock_hold_reason(serial, req_offset, _t.time())
+            if reason:
+                calibration = False
+                _ntp_logger.info("NTP request from %s... (%s) is %+ds off, replying calibrationTag false and holding: %s",
+                                 serial[:6], _device_name(serial), req_offset, reason)
+            else:
+                send_sync = True
+    payload, now_ms = _build_ntp_payload(calibration)
+    # LOG ONLY for now: the request carries the device's own clock, so we can
+    # tell whether this reply's jump would skip or repeat a meal. The reply is
+    # still sent as before, since it is untested what a feeder does when its
+    # one post-boot time request goes unanswered. This records what a held
+    # reply WOULD have been so that can be judged from real data first.
+    try:
+        if (not _uses_cloud_time_sync(serial) and _devices.get(serial, (None, None))[1] in ("one_rfid", "granary")
+                and isinstance(device_ts_ms, (int, float)) and device_ts_ms > 1e12):
+            import time as _t
+            req_offset = round(_t.time() - device_ts_ms / 1000.0)
+            if abs(req_offset) > CLOCK_OFFSET_THRESHOLD_SECS:
+                # Always logged (not just when a meal is at stake): comparing this
+                # with the first heartbeat after the reply shows whether the
+                # feeder actually applied the reply (see CLOCK OFF lines).
+                _ntp_logger.info("NTP request from %s... (%s) carried a clock %+ds off",
+                                 serial[:6], _device_name(serial), req_offset)
+                reason, _ = _clock_hold_reason(serial, req_offset, _t.time())
+                if reason:
+                    _ntp_logger.info("NTP request from %s... (%s) is %+ds off and replying would jump the clock: %s "
+                                     "(replied anyway, log-only)", serial[:6], _device_name(serial), req_offset, reason)
+    except Exception:
+        _LOGGER.exception("NTP request skip-check failed for %s...", serial[:6])
     try:
         await _client_ref.publish(response_topic, payload)
         _LOGGER.info("NTP response sent: ts=%s", now_ms)
@@ -1506,6 +1901,9 @@ async def _respond_ntp(request_topic: str) -> None:
     except Exception:
         _LOGGER.exception("Failed to send NTP response")
         _ntp_logger.exception("RESPONSE to %s... FAILED", serial[:6])
+        return
+    if send_sync:
+        await _send_ntp_sync(serial, _devices[serial][1])
 
 
 async def _push_ntp_sync(serial: str, device_type: str) -> None:
@@ -1539,6 +1937,82 @@ async def _push_ntp_sync(serial: str, device_type: str) -> None:
         _ntp_logger.exception("PROACTIVE PUSH to %s... FAILED", serial[:6])
 
 
+def _scheduled_times_between(serial: str, start: float, end: float) -> list:
+    """Epoch seconds of every enabled scheduled feed with start < time <= end.
+    Plans store executionTime as UTC HH:MM and repeatDay as 1=Mon..7=Sun, the
+    same convention the Next Meal sensor and the missed-feed alert use."""
+    import datetime as _dt
+    import storage as _storage
+    if end <= start:
+        return []
+    out = []
+    first = _dt.datetime.fromtimestamp(start, tz=_dt.timezone.utc).date() - _dt.timedelta(days=1)
+    last = _dt.datetime.fromtimestamp(end, tz=_dt.timezone.utc).date() + _dt.timedelta(days=1)
+    for plan in _storage.get_active_feeding_plans(serial):
+        if plan.get("_enabled") is False:
+            continue
+        try:
+            h, m = map(int, plan.get("executionTime", "").split(":"))
+        except (ValueError, AttributeError):
+            continue
+        repeat_day = plan.get("repeatDay", [])
+        day = first
+        while day <= last:
+            if day.weekday() + 1 in repeat_day:
+                ts = _dt.datetime(day.year, day.month, day.day, h, m, tzinfo=_dt.timezone.utc).timestamp()
+                if start < ts <= end and not _storage.occurrence_skipped(plan, ts):
+                    out.append(ts)
+            day += _dt.timedelta(days=1)
+    return sorted(out)
+
+
+def _fmt_feed_time(epoch: float) -> str:
+    import re as _re
+    return _re.sub(r"(:\d\d):\d\d", lambda m: m.group(1), _format_local_time(int(epoch * 1000)))
+
+
+def _clock_hold_reason(serial: str, offset: int, now: float):
+    """Why a time correction should wait, or None if it is safe to jump now.
+    offset > 0 means the device clock is slow. Returns (reason, meal_times)."""
+    import storage as _storage
+    device_now = now - offset
+    if offset > 0:
+        meals = _scheduled_times_between(serial, device_now - CLOCK_HOLD_SLACK_SECS, now + CLOCK_HOLD_SLACK_SECS)
+        if meals:
+            return ("a scheduled feed at %s falls inside the %ds jump and would be skipped"
+                    % (", ".join(_fmt_feed_time(x) for x in meals), offset)), meals
+        return None, []
+    meals = _scheduled_times_between(serial, now - CLOCK_HOLD_SLACK_SECS, device_now + CLOCK_HOLD_SLACK_SECS)
+    if meals:
+        return ("a scheduled feed at %s falls inside the %ds jump back and could feed twice"
+                % (", ".join(_fmt_feed_time(x) for x in meals), -offset)), meals
+    # Belt and braces: a feed that actually dispensed within the replayed
+    # stretch would repeat even if it isn't in the plans we know about (for
+    # example plans made in the OEM app).
+    recent = [e for e in _storage.get_feeder_log(serial, 20)
+              if e.get("type") == "food_dispensed" and e.get("source") == "scheduled"
+              and e.get("ts", 0) / 1000 >= now - (-offset + 60)]
+    if recent:
+        return "a scheduled feed dispensed within the last %ds and could repeat" % (-offset + 60), []
+    return None, []
+
+
+async def _notify_skipped_feeds(serial: str, offset: int, meals: list) -> None:
+    import storage as _storage
+    import notifications as _notifications
+    cfg = _storage.get_devices().get(serial, {})
+    if not cfg.get("notifications", {}).get("missed_feed", True):
+        return
+    name = cfg.get("name") or serial[:8]
+    when = ", ".join(_fmt_feed_time(x) for x in meals)
+    msg = (f"{name}'s clock was {offset // 60} min slow and has now been corrected. "
+           f"The {when} scheduled feed was skipped by the correction. "
+           f"No food was added to make up for it, feed manually if you want to.")
+    await _notifications.fire_notification(
+        f"Petlibro Local: {name} - Scheduled feed skipped", msg, _storage.get_settings(), cfg,
+        notification_id=f"petlibro_local_{serial[:8]}_clock_skip_{int(meals[0])}")
+
+
 async def _check_device_clock(serial: str, device_ts_ms) -> None:
     """Compares a heartbeat's own timestamp to real time. Every heartbeat
     carries the device's clock, so a wrong one is visible within about a
@@ -1554,6 +2028,7 @@ async def _check_device_clock(serial: str, device_ts_ms) -> None:
     fix = _clock_fix_state.setdefault(serial, {"last_push": 0.0, "tries": 0, "backoff_until": 0.0})
     if abs(offset) <= CLOCK_OFFSET_THRESHOLD_SECS:
         fix["tries"] = 0
+        fix.pop("held_since", None)
         return
     if not ENABLE_PROACTIVE_NTP_PUSH:
         return
@@ -1562,6 +2037,21 @@ async def _check_device_clock(serial: str, device_ts_ms) -> None:
     device_type = _devices.get(serial, (None, None))[1]
     if not device_type:
         return
+    skipped_meals = []
+    if device_type in ("one_rfid", "granary"):
+        reason, meals = _clock_hold_reason(serial, offset, now)
+        if reason:
+            held_since = fix.setdefault("held_since", now)
+            if offset > 0 and now - held_since > CLOCK_SLOW_HOLD_MAX_SECS:
+                skipped_meals = [m for m in meals if now - offset < m <= now]
+            else:
+                if now - fix.get("last_hold_log", 0.0) >= 600:
+                    fix["last_hold_log"] = now
+                    _ntp_logger.info("CLOCK OFF %+ds on %s... (%s), holding correction: %s",
+                                     offset, serial[:6], _device_name(serial), reason)
+                return
+        else:
+            fix.pop("held_since", None)
     if fix["tries"] >= CLOCK_CORRECTION_MAX_TRIES:
         fix["tries"] = 0
         fix["backoff_until"] = now + CLOCK_CORRECTION_BACKOFF_SECS
@@ -1573,7 +2063,9 @@ async def _check_device_clock(serial: str, device_ts_ms) -> None:
     fix["last_push"] = now
     _ntp_logger.info("CLOCK OFF %+ds on %s... (%s), pushing correction (attempt %d)",
                      offset, serial[:6], _device_name(serial), fix["tries"])
-    await _push_ntp_sync(serial, device_type)
+    await _correct_clock(serial, device_type)
+    if skipped_meals:
+        await _notify_skipped_feeds(serial, offset, skipped_meals)
 
 
 async def _check_missed_feeds() -> None:
@@ -1607,7 +2099,7 @@ async def _check_missed_feeds() -> None:
         dispenses = [e.get("ts", 0) / 1000 for e in _storage.get_feeder_log(serial, 100)
                      if e.get("type") == "food_dispensed"]
         today = _dt.datetime.now(_dt.timezone.utc).date()
-        for plan in _storage.get_device_feeding_plans(serial):
+        for plan in _storage.get_active_feeding_plans(serial):
             if plan.get("_enabled") is False:
                 continue
             exec_time = plan.get("executionTime", "")
@@ -1625,6 +2117,8 @@ async def _check_missed_feeds() -> None:
                 if not (now - MISSED_FEED_LOOKBACK_SECS <= expected <= now - MISSED_FEED_LEEWAY_SECS):
                     continue
                 if expected < watching_since:
+                    continue
+                if _storage.occurrence_skipped(plan, expected):
                     continue
                 if any(expected - 120 <= d <= now for d in dispenses):
                     continue
@@ -1693,6 +2187,8 @@ async def _offline_watchdog():
             for pet_id, pet in pets.items():
                 if not pet.get("no_eat_alert_enabled"):
                     _pet_no_eat_alerted.pop(pet_id, None)
+                    if pet.get("no_eat_alerted_for"):
+                        _storage.save_pet(pet_id, {"no_eat_alerted_for": None})
                     continue
                 threshold = int(pet.get("no_eat_alert_hours") or 12) * 3600
                 pet_rfid  = str(pet.get("rfid_tag")) if pet.get("rfid_tag") else None
@@ -1713,7 +2209,11 @@ async def _offline_watchdog():
                 if last_eat_ms is None:
                     continue  # no sessions recorded yet, don't alert
                 secs_since = now - last_eat_ms / 1000
-                if secs_since >= threshold and not _pet_no_eat_alerted.get(pet_id):
+                # "Already alerted" is remembered on disk as the last meal the alert
+                # was sent for, so a restart or rebuild does not send it again for
+                # the same stretch of not eating; a new meal changes that value.
+                already = pet.get("no_eat_alerted_for") == last_eat_ms or _pet_no_eat_alerted.get(pet_id)
+                if secs_since >= threshold and not already:
                     pet_name = pet.get("name") or "Your pet"
                     hrs = secs_since / 3600
                     msg   = f"{pet_name} has not eaten in {hrs:.1f} hours."
@@ -1729,9 +2229,12 @@ async def _offline_watchdog():
                                                          notification_id=notif_id)
                     )
                     _pet_no_eat_alerted[pet_id] = True
+                    _storage.save_pet(pet_id, {"no_eat_alerted_for": last_eat_ms})
                     _LOGGER.info("No-eat alert fired for pet %s...", pet_id[:6])
                 elif secs_since < threshold:
                     _pet_no_eat_alerted.pop(pet_id, None)
+                    if pet.get("no_eat_alerted_for"):
+                        _storage.save_pet(pet_id, {"no_eat_alerted_for": None})
         except Exception:
             _LOGGER.exception("Pet no-eat watchdog error")
 
@@ -1784,7 +2287,7 @@ async def _mqtt_loop():
                     # HA MQTT Discovery
                     cfg   = _storage.get_devices().get(serial, {})
                     state = _state.get(serial, {})
-                    plans = _storage.get_device_feeding_plans(serial)
+                    plans = _storage.get_active_feeding_plans(serial)
                     for ct in ha_mqtt.get_command_topics(serial, device_type):
                         await client.subscribe(ct)
                     custom_icon_names = [ic["name"] for ic in _storage.get_custom_icons()]

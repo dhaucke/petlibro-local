@@ -161,11 +161,11 @@
           <p class="form-hint" data-i18n="settings.email_to_hint">Fallback address used when a device has no email override set.</p>
         </div>
         <div class="form-row">
-          <label class="form-label" data-i18n="settings.mobile_service">Default Mobile Service</label>
+          <label class="form-label" data-i18n="settings.mobile_service">Default Companion App Service</label>
           <select class="form-select" id="s-notify-mobile-service">
             <option value="" data-i18n="settings.email_none">-- None --</option>
           </select>
-          <p class="form-hint" data-i18n="settings.mobile_hint">Default HA mobile_app service. Used when a device has Mobile enabled but no per-device service set.</p>
+          <p class="form-hint" data-i18n="settings.mobile_hint">Mobile alerts are push notifications sent through the Home Assistant Companion app on your phone, not text messages. This is the default phone (mobile_app service) used when a device has Mobile enabled but no per-device service set.</p>
         </div>
       </div>
       <button class="btn-primary" id="btn-save-notifications">
@@ -289,6 +289,7 @@
       <button class="dtab active" data-dtab="overview" data-i18n="device_tab.overview">Overview</button>
       <button class="dtab" data-dtab="controls" id="dtab-controls" style="display:none" data-i18n="device_tab.controls">Controls</button>
       <button class="dtab" data-dtab="schedule" id="dtab-schedule" style="display:none" data-i18n="device_tab.schedule">Schedule</button>
+      <button class="dtab" data-dtab="led" id="dtab-led" style="display:none" data-i18n="device_tab.led">LED</button>
       <button class="dtab" data-dtab="maintenance" data-i18n="device_tab.maintenance">Maintenance</button>
       <button class="dtab" data-dtab="log" data-i18n="device_tab.log">Log</button>
       <button class="dtab" data-dtab="notifications" data-i18n="device_tab.alerts">Alerts</button>
@@ -369,6 +370,7 @@
   <div class="modal">
     <button class="modal-close" id="btn-close-add">✕</button>
     <div class="modal-title" data-i18n="add_device.title">Add Device</div>
+    <p class="form-hint" style="color:var(--pl-warning);margin:0 0 12px" data-i18n="add_device.restart_warning">Setting up a device restarts the Mosquitto broker, which reboots all of your devices for a minute or two. Avoid doing this close to a feeding time.</p>
 
     <div id="add-method-select">
       <p class="form-hint" style="margin-bottom:14px" data-i18n="add_device.method_hint">How would you like to set up this device?</p>
@@ -609,7 +611,7 @@
         </label>
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
           <input type="checkbox" id="p-notify-mobile" style="width:16px;height:16px;accent-color:var(--pl-accent)">
-          <span>Mobile push</span>
+          <span>Mobile (Home Assistant Companion app)</span>
         </label>
       </div>
     </div>
@@ -673,6 +675,68 @@
       <input class="form-input" id="record-audio-name" type="text" placeholder="breakfast" maxlength="40">
     </div>
     <button class="btn-primary" id="btn-record-save" style="width:100%;margin-top:12px" disabled data-i18n="settings.save">Save</button>
+  </div>
+</div>
+
+<!-- Animation editor modal -->
+<div class="modal-overlay" id="anim-editor-overlay">
+  <div class="modal" style="max-width:760px;width:calc(100% - 32px)">
+    <div class="modal-header">
+      <span class="modal-title" data-i18n="animed.title">Animation Editor</span>
+      <button onclick="closeAnimEditor()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--pl-subtext);line-height:1;padding:4px">&#x2715;</button>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      <div style="width:170px;flex-shrink:0">
+        <button class="btn-primary" id="ae-new" style="width:100%;margin-bottom:10px" data-i18n="animed.new">+ New animation</button>
+        <div class="tab-section-heading" data-i18n="animed.library">Library</div>
+        <div id="ae-list"></div>
+        <p class="form-hint" data-i18n="animed.library_hint">Pick one to copy it into the editor. Built-in ones can be changed and saved as your own.</p>
+      </div>
+      <div style="flex:1;min-width:260px">
+        <p class="form-hint" style="margin:0 0 8px" data-i18n="animed.how">Click or drag the dots to light or clear them. Add a frame for each step of the animation, then press Send to Feeder.</p>
+        <canvas id="ae-grid" width="520" height="140" style="width:100%;border-radius:6px;background:#10101a;touch-action:none;cursor:crosshair;display:block"></canvas>
+        <div id="ae-strip" style="display:flex;gap:6px;overflow-x:auto;padding:8px 0"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn-secondary" id="ae-add" data-i18n="animed.add">+ Blank</button>
+          <button class="btn-secondary" id="ae-dup" data-i18n="animed.dup">Duplicate</button>
+          <button class="btn-secondary" id="ae-del" style="color:var(--pl-danger)" data-i18n="animed.del">Delete</button>
+          <button class="btn-secondary" id="ae-left" title="Move earlier">&#x25C0;</button>
+          <button class="btn-secondary" id="ae-right" title="Move later">&#x25B6;</button>
+          <button class="btn-secondary" id="ae-clear" data-i18n="animed.clear">Clear</button>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;align-items:center">
+          <span style="font-size:12px;color:var(--pl-subtext)" data-i18n="animed.shift">Shift frame</span>
+          <button class="btn-secondary" id="ae-sl">&#x2190;</button>
+          <button class="btn-secondary" id="ae-sr">&#x2192;</button>
+          <button class="btn-secondary" id="ae-su">&#x2191;</button>
+          <button class="btn-secondary" id="ae-sd">&#x2193;</button>
+          <span id="ae-count" style="margin-left:auto;font-size:12px;color:var(--pl-subtext)"></span>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+          <canvas id="ae-preview" width="260" height="70" style="width:130px;border-radius:6px;background:#10101a"></canvas>
+          <div style="flex:1">
+            <label class="form-label" data-i18n="anim.speed">Speed (lower is faster)</label>
+            <input type="range" id="ae-speed" min="2" max="8" value="4" style="width:100%">
+          </div>
+        </div>
+        <input class="form-input" type="text" id="ae-name" maxlength="32" data-i18n-ph="animed.name" placeholder="Animation name" style="margin-top:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn-primary" id="ae-send" style="flex:1" data-i18n="animed.send">Send to Feeder</button>
+          <button class="btn-secondary" id="ae-save" style="flex:1" data-i18n="animed.save">Save</button>
+          <button class="btn-secondary" id="ae-export" data-i18n="animed.export">Export</button>
+        </div>
+        <details style="margin-top:10px">
+          <summary style="cursor:pointer;font-size:13px;color:var(--pl-subtext)" data-i18n="animed.share">Import / export</summary>
+          <textarea class="form-input" id="ae-json" rows="5" style="width:100%;margin-top:8px;font-family:monospace;font-size:11px" data-i18n-ph="animed.json_ph" placeholder="Paste animation JSON here, then press Import"></textarea>
+          <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <button class="btn-secondary" id="ae-import" data-i18n="animed.import">Import</button>
+            <label class="btn-secondary" style="cursor:pointer;margin:0"><span data-i18n="animed.import_file">Import file</span><input type="file" id="ae-file" accept=".json,application/json,text/plain" style="display:none"></label>
+          </div>
+          <p class="form-hint" data-i18n="animed.share_hint">Export fills this box and downloads a file. Import accepts that JSON, or a list of frames where each frame is 7 text rows of 26 characters (# lit, . dark).</p>
+        </details>
+        <p class="form-hint" id="ae-msg"></p>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -756,6 +820,7 @@
 <script src="modal-edit.js?v={{VERSION}}"></script>
 <script src="modal-add.js?v={{VERSION}}"></script>
 <script src="modal-icon-editor.js?v={{VERSION}}"></script>
+<script src="modal-animation-editor.js?v={{VERSION}}"></script>
 <script src="modal-feed-calibration.js?v={{VERSION}}"></script>
 <script src="pets.js?v={{VERSION}}"></script>
 <script src="settings.js?v={{VERSION}}"></script>

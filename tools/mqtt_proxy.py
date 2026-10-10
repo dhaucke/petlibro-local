@@ -34,7 +34,7 @@ Setup overview
 
 5. Power-cycle the device, then ASAP run this script and open the PetLibro app. The device will reconnect through
    the proxy to the real cloud — the app will show it as online. The username,
-   password, and full packet log will appear in the console and in mqtt_proxy.log.
+   password, and full packet log will appear in the console and in a mqtt_proxy_<date>_<time>.log file next to this script.
 
 NOTE: While the DNS redirect is active, any other PetLibro devices on your network
 will also be redirected and will temporarily lose Petlibro Local connectivity.
@@ -48,7 +48,7 @@ fresh push. While the device was talking to the real cloud during capture,
 the cloud may have changed its stored schedule, and there's no other way to
 be sure the device is running Petlibro Local's schedule again afterward.
 
-PRIVACY: mqtt_proxy.log contains your device's full serial, username, and password
+PRIVACY: the mqtt_proxy_*.log files contain your device's full serial, username, and password
 in plain text. Do not post it publicly or attach it to GitHub issues. If you're
 sending the log to someone for a packet-format issue (not a credential-capture
 issue), you can delete the "username="/"password=" lines first, they aren't
@@ -76,10 +76,18 @@ CLOUD_HOST = "0.0.0.0"
 CLOUD_PORT  = 1883
 LISTEN_PORT = 1883
 
+# How long to keep capturing, in minutes. 0 = no limit (stop with Ctrl+C).
+# You can ALWAYS stop early with Ctrl+C: everything is written to the log file
+# line by line as it arrives, so nothing captured so far is lost.
+RUN_MINUTES = 30
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 import os as _os
-LOG_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "mqtt_proxy.log")
+# A new file per run, so starting the script again never overwrites an earlier
+# capture.
+LOG_FILE = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                         "mqtt_proxy_" + datetime.now().strftime("%Y%m%d_%H%M%S") + ".log")
 
 _log_fh = open(LOG_FILE, "w", buffering=1)
 
@@ -144,6 +152,19 @@ def _parse_publish(packet: bytes) -> dict:
     return {"topic": topic, "payload": payload}
 
 
+def _parse_subscribe(packet: bytes) -> list:
+    """Topic filters a client subscribes to (MQTT SUBSCRIBE). Useful for
+    discovering which topics a device listens on (for example an update topic)."""
+    _, c = _parse_remaining_length(packet, 1)
+    off = 1 + c + 2  # skip the 2-byte packet identifier
+    topics = []
+    while off < len(packet):
+        topic, off = _parse_utf8(packet, off)
+        off += 1  # requested QoS byte
+        topics.append(topic)
+    return topics
+
+
 def _extract_packets(data: bytes) -> list[tuple[int, bytes]]:
     results = []
     pos = 0
@@ -204,7 +225,7 @@ def _handle_packets(data: bytes, direction: str):
                 _print_and_log(f"[{_ts()}]          username={user}")
                 _print_and_log(f"[{_ts()}]          password={pw}")
                 _print_and_log(f"[{_ts()}] --- Copy username and password into Petlibro Local ---")
-                _print_and_log(f"[{_ts()}] *** mqtt_proxy.log contains credentials — do not share publicly ***")
+                _print_and_log(f"[{_ts()}] *** the mqtt_proxy_*.log file contains credentials — do not share publicly ***")
             except Exception:
                 _log(f"[{_ts()}] CONNECT (parse error)")
 
@@ -213,6 +234,12 @@ def _handle_packets(data: bytes, direction: str):
             rc_names = {0: "OK", 1: "bad proto", 2: "bad client_id",
                         3: "server unavail", 4: "bad credentials", 5: "not authorized"}
             _print_and_log(f"[{_ts()}] CONNACK ({direction}) rc={rc} ({rc_names.get(rc, 'unknown')})")
+
+        elif pkt_type == 8:  # SUBSCRIBE
+            try:
+                _print_and_log(f"[{_ts()}] SUBSCRIBE ({direction}): " + ", ".join(_parse_subscribe(packet)))
+            except Exception:
+                _log(f"[{_ts()}] SUBSCRIBE (parse error)")
 
         elif pkt_type == 14:  # DISCONNECT
             _print_and_log(f"[{_ts()}] DISCONNECT ({direction})")
@@ -258,7 +285,7 @@ async def handle_device(dev_r, dev_w):
         pass
 
     if not client_id.upper().startswith(SERIAL_PREFIX.upper()):
-        _log(f"[{_ts()}] ignored client: {client_id[:16] if client_id else 'unknown'}")
+        _print_and_log(f"[{_ts()}] ignored client (does not match {SERIAL_PREFIX}): {client_id or 'unknown'}")
         dev_w.close()
         return
 
@@ -296,15 +323,19 @@ async def _run():
         return
     server = await asyncio.start_server(handle_device, "0.0.0.0", LISTEN_PORT)
     _print_and_log(f"[{_ts()}] MQTT proxy :{LISTEN_PORT} -> {CLOUD_HOST}:{CLOUD_PORT}")
+    _print_and_log(f"[{_ts()}] listening for device serial: {SERIAL_PREFIX}  (any other device is ignored)")
     _print_and_log(f"[{_ts()}] waiting for device (power-cycle or Wi-Fi reconnect)...")
     _print_and_log(f"[{_ts()}] full log: {LOG_FILE}")
+    if RUN_MINUTES > 0:
+        _print_and_log(f"[{_ts()}] will stop after {RUN_MINUTES} minutes, or press Ctrl+C any time (the log is saved as it goes)")
+    else:
+        _print_and_log(f"[{_ts()}] no time limit, press Ctrl+C to stop (the log is saved as it goes)")
     print()
     async with server:
-        await asyncio.gather(
-            server.serve_forever(),
-            _shutdown_after(300),
-            return_exceptions=True,
-        )
+        tasks = [server.serve_forever()]
+        if RUN_MINUTES > 0:
+            tasks.append(_shutdown_after(RUN_MINUTES * 60))
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 if __name__ == "__main__":
@@ -313,5 +344,5 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
-        _print_and_log("proxy stopped.")
+        _print_and_log("proxy stopped. Log saved to: " + LOG_FILE)
         _log_fh.close()

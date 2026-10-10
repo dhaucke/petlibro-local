@@ -14,7 +14,7 @@ manually and for reverse-engineering new device types.
 
 Requires Python 3.9+, no extra packages.
 
-> **Privacy:** `mqtt_proxy.log` contains credentials and device data in plain text.
+> **Privacy:** the `mqtt_proxy_<date>_<time>.log` files contain credentials and device data in plain text.
 > Do not post it publicly or attach it to GitHub issues.
 
 ---

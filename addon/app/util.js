@@ -33,6 +33,7 @@ function applyI18n() {
     const key = el.dataset.i18n;
     if (key) el.textContent = t(key);
   });
+  document.querySelectorAll("[data-i18n-ph]").forEach(el => { el.placeholder = t(el.dataset.i18nPh); });
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────
@@ -99,10 +100,29 @@ function gramsToDisplay(grams) {
 // plain integer portion count, grams/oz are display-only, computed here.
 // Was cup fractions (1/12 cup per portion) until 2026-09-13, switched to oz
 // to match the OEM app's own display, which shows oz rather than cups now.
-function fmtPortions(n, gramsPerPortion) {
+// Units for a feeder's food amount, matching the Petlibro app's per-device
+// Food Amount picker. One portion is a fixed scoop of 1/12 US legal cup = 20 ml
+// (as the Petlibro app labels it), so cup and ml are exact multiples of the
+// portion count. Grams and ounces depend on the food: 10 g per portion is only
+// the default, a calibrated device uses its own measured grams.
+const FEED_ML_PER_PORTION = 20;
+const _CUP_FRACTIONS = {1: "1/12", 2: "1/6", 3: "1/4", 4: "1/3", 5: "5/12", 6: "1/2",
+                        7: "7/12", 8: "2/3", 9: "3/4", 10: "5/6", 11: "11/12"};
+
+function fmtCups(n) {
+  const whole = Math.floor(n / 12);
+  const rem = Math.round(n - whole * 12);
+  const frac = rem ? _CUP_FRACTIONS[rem] : "";
+  const amount = [whole || "", frac].filter(Boolean).join(" ") || "0";
+  return `${amount} ${n > 12 ? "cups" : "cup"}`;
+}
+
+function fmtPortions(n, gramsPerPortion, unit) {
+  if (unit === "cup") return fmtCups(n);
+  if (unit === "ml") return `${Math.round(n * FEED_ML_PER_PORTION * 10) / 10} ml`;
   const g = gramsPerPortion || 10;
   const grams = Math.round(n * g * 10) / 10;
-  if (useImperial()) {
+  if (unit === "oz" || (unit !== "g" && useImperial())) {
     return `${(grams / 28.349523125).toFixed(2)}oz`;
   }
   return `${grams}g`;
@@ -252,6 +272,8 @@ function nextMealLabel(plans) {
     for (const plan of candidates) {
       const [h, m] = plan.localTime.split(":").map(Number);
       if (off === 0 && h * 60 + m <= nowMin) continue;
+      const at = new Date(day); at.setHours(h, m, 0, 0);
+      if (typeof plan.skipEndTime === "number" && at.getTime() < plan.skipEndTime) continue;
       return _fmt12h(h, m);
     }
   }
