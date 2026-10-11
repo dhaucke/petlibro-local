@@ -36,8 +36,6 @@ Back to the [README](../README.md).
 - Automatic clock correction: every device reports its own clock in each heartbeat, so a clock that has drifted or come back stale after a reboot is noticed and corrected. On the One RFID feeder, Petlibro Local also sends the same time-sync message the Petlibro cloud sends when the feeder asks for the time after a boot. A correction is held while jumping the clock would skip or repeat a scheduled feed. The modal header shows "Clock in sync" (or how far off it is), and there is a diagnostic Clock Offset sensor in Home Assistant
 - One RFID Smart Feeder backup battery: current charge and AC/battery status shown on the device card, modal header, and Overview tab. Exposed to Home Assistant as a Battery sensor and an "On AC Power" binary sensor. Notifications for "running on battery" (fires when caught before the feeder drops Wi-Fi to save power, since this model appears to disconnect shortly after losing AC) and a configurable low-battery percentage threshold in the Maintenance tab
 
-> **Tip:** If you're setting up battery devices around your home in general, not just this feeder, check out my other project, [Battery Sentinel](https://github.com/smcneece/battery-sentinel), a Home Assistant app for monitoring battery devices with an alert system, battery type lookup, and a lot more. Genuinely one of my favorite things I've built.
-
 ### Feeder Controls
 - Feed Now button: dispenses one portion immediately (pick up to 5 portions in the app)
 - Open Door: opens the feeder lid on demand (the feeder closes it automatically after its configured delay)

@@ -640,17 +640,14 @@
       </tr>
     </table>
     <div style="display:flex;flex-direction:column;gap:12px">
-      <a class="about-link" href="https://github.com/smcneece/petlibro-local" target="_blank" rel="noopener" data-i18n="about.github">GitHub Repository</a>
-      <a class="about-link" href="https://github.com/smcneece/petlibro-local#readme" target="_blank" rel="noopener" data-i18n="about.readme">README / Documentation</a>
-      <a class="about-link" href="https://github.com/smcneece/petlibro-local/blob/main/CHANGELOG.md" target="_blank" rel="noopener" data-i18n="about.changelog">Changelog</a>
-      <a class="about-link" href="https://github.com/smcneece/petlibro-local/issues/new" target="_blank" rel="noopener" data-i18n="about.report_issue">Report an Issue</a>
-      <a class="about-link" href="https://github.com/smcneece/petlibro-local/issues/new?labels=enhancement" target="_blank" rel="noopener" data-i18n="about.request_feature">Request a Feature</a>
-      <a class="about-link about-sponsor" href="https://github.com/sponsors/smcneece" target="_blank" rel="noopener" data-i18n="about.sponsor">♥ Sponsor this project</a>
+      <a class="about-link" href="https://github.com/dhaucke/petlibro-local" target="_blank" rel="noopener" data-i18n="about.github">GitHub Repository</a>
+      <a class="about-link" href="https://github.com/dhaucke/petlibro-local#readme" target="_blank" rel="noopener" data-i18n="about.readme">README / Documentation</a>
+      <a class="about-link" href="https://github.com/dhaucke/petlibro-local/blob/main/CHANGELOG.md" target="_blank" rel="noopener" data-i18n="about.changelog">Changelog</a>
     </div>
     <hr style="border:none;border-top:1px solid var(--pl-border);margin:20px 0">
     <div>
       <button class="btn-secondary" id="btn-debug-capture" style="width:100%" data-i18n="about.debug_capture">Download Debug Capture</button>
-      <p style="font-size:12px;color:var(--pl-subtext);margin-top:8px" data-i18n="about.debug_capture_hint">Downloads a rolling 24-hour log of raw device MQTT traffic, including any device this app doesn't recognize (marked UNRECOGNIZED). Collected continuously in the background, so it also catches devices that only check in occasionally. WiFi name and any local audio server URL are redacted, but this file still includes your device serial numbers, so please email it to github@mega-city.com rather than posting it publicly when reporting an unsupported or misbehaving device.</p>
+      <p style="font-size:12px;color:var(--pl-subtext);margin-top:8px" data-i18n="about.debug_capture_hint">Downloads a rolling 24-hour log of raw device MQTT traffic, including any device this app doesn't recognize (marked UNRECOGNIZED). Collected continuously in the background, so it also catches devices that only check in occasionally. WiFi name and any local audio server URL are redacted, but this file still includes your device serial numbers, so don't post it publicly.</p>
       <button class="btn-secondary" id="btn-ntp-log" style="width:100%;margin-top:10px">Download NTP Debug Log (temporary)</button>
       <p style="font-size:12px;color:var(--pl-subtext);margin-top:8px">Temporary, for an ongoing investigation into delayed feedings. Downloads /data/ntp_debug.log, a dedicated log of NTP time-sync activity and feeding-plan requests. Safe to ignore unless asked to grab this.</p>
     </div>

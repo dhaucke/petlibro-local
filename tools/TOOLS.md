@@ -30,4 +30,4 @@ Requires Python 3.9+ and paho-mqtt (`pip install paho-mqtt`).
 
 If you capture useful packet logs for a device that is not yet supported,
 please open an issue or pull request on the
-[Petlibro Local GitHub repository](https://github.com/smcneece/petlibro-local).
+[Petlibro Local GitHub repository](https://github.com/dhaucke/petlibro-local).

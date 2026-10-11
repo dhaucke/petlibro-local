@@ -2,16 +2,16 @@
 
 > **dhaucke fork** of [smcneece/petlibro-local](https://github.com/smcneece/petlibro-local) with security hardening (see `CHANGELOG.md`): the web server only answers the Supervisor ingress proxy (except `/audio/*`, which feeders fetch directly), diagnostics no longer return Mosquitto logins, captured credentials only become a Mosquitto login after you confirm the device, logins the app did not create are never changed or removed, `hassio_role: manager` instead of `admin`, no `/share` mapping, and pinned base image and Python packages.
 
-> **Setup note:** this is still a young project, though it has been running my own devices since mid-August. You should be comfortable with Home Assistant, Mosquitto broker configuration, and local DNS overrides before attempting setup. Bug reports and feedback are very welcome; please use [GitHub Issues](https://github.com/smcneece/petlibro-local/issues).
+> **Setup note:** this is still a young project, though it has been running my own devices since mid-August. You should be comfortable with Home Assistant, Mosquitto broker configuration, and local DNS overrides before attempting setup.
 
 Keep your Petlibro fountains and feeders running entirely on your local network. Petlibro Local intercepts your devices' MQTT credentials during setup, connects them directly to your Home Assistant Mosquitto broker, and gives you desktop and mobile control panel with no Petlibro cloud dependency after that.
 
 [![GitHub release (latest by date)](https://img.shields.io/github/v/release/dhaucke/petlibro-local)](https://github.com/dhaucke/petlibro-local/releases)
-[![GitHub](https://img.shields.io/github/license/smcneece/petlibro-local)](LICENSE)
+[![GitHub](https://img.shields.io/github/license/dhaucke/petlibro-local)](LICENSE)
 
 > **Before you start:** your device first has to be connected to your Wi-Fi with the official Petlibro app (that one-time setup needs the app and a Petlibro account). Once it's on your Wi-Fi, it can run 100% locally, with no cloud and no internet access at all.
 
-> **Is your device on newer firmware than the ones I've tested?** I've seen One RFID feeders on firmware 3.0.72 (hardware 5.0.0) and 2.0.47 (hardware 4.0.0), and Dockstream 2 fountains on 0.0.34 (hardware 1.0.0). I have no version for the other models. If yours shows something different (it's at the top of the device's modal), please [open an issue](https://github.com/smcneece/petlibro-local/issues) and tell me the version. If you're comfortable testing it, also tell me whether the device still reboots when Mosquitto restarts (see [Restarting Mosquitto Reboots Your Devices](#restarting-mosquitto-reboots-your-devices)). Newer firmware may behave differently, and it helps me work out what to build next.
+> **Is your device on newer firmware than the ones I've tested?** I've seen One RFID feeders on firmware 3.0.72 (hardware 5.0.0) and 2.0.47 (hardware 4.0.0), and Dockstream 2 fountains on 0.0.34 (hardware 1.0.0). I have no version for the other models. Newer firmware may behave differently, for example in whether the device still reboots when Mosquitto restarts (see [Restarting Mosquitto Reboots Your Devices](#restarting-mosquitto-reboots-your-devices)).
 
 > ⚠️ **Installation type**: Petlibro Local is a Home Assistant App requiring a Supervisor-managed installation (HA OS or HA Supervised). Home Assistant Core and Home Assistant Container are not supported.
 
@@ -249,31 +249,6 @@ Restarting Petlibro Local or Home Assistant itself doesn't affect your devices, 
 
 ---
 
-## Contributing
-
-**Before opening an issue or PR:** Check the [live changelog issue](https://github.com/smcneece/petlibro-local/issues?q=label%3Achangelog) first. It is kept up to date with every commit and shows bugs already being tracked, fixes already merged, and features already in progress. Duplicate reports slow things down and a feature you want may already be done.
-
-Pull requests are welcome. A few things to keep in mind before opening one.
-
-**Test your changes against a real Home Assistant instance.** PRs that have not been run will be closed. If the app does not start, that is caught immediately.
-
-**Describe what you tested.** In your PR description, say what device you tested with, what functionality you exercised, and what you could not test due to your hardware. Vague descriptions will be asked for clarification before merge.
-
-**Adding a new device type** requires three things: the MQTT model string (the topic prefix after `dl/`), the serial number prefix for auto-detection in `DEVICE_TYPE_MAP`, and product images following the `{mqtt_model}_{color}.png` naming convention. Open an issue first if you want guidance on how to capture these from a new device.
-
-**Rebase against the current main branch** before opening a PR.
-
----
-
-## Support
-
-- **Issues and bug reports**: [GitHub Issues](https://github.com/smcneece/petlibro-local/issues)
-- **Feature requests and questions**: [GitHub Issues](https://github.com/smcneece/petlibro-local/issues)
-- **Sharing a debug capture**: Help/About has a "Download Debug Capture" button that grabs the raw MQTT traffic your devices are sending. WiFi network name and any local audio server URL are automatically redacted before download, but it still includes your device serial numbers, so please email it to github@mega-city.com rather than posting it publicly. Still open a GitHub issue to describe the problem itself, just send the capture file by email.
-- **Community**: [Home Assistant Community Forum](https://community.home-assistant.io/)
-
----
-
 ## Acknowledgements
 
 Device data structures, API field names, and device class patterns were informed by the [ha_petlibro](https://github.com/jjjonesjr33/ha_petlibro) Home Assistant integration by [@jjjonesjr33](https://github.com/jjjonesjr33) and contributors. That project reverse-engineered the Petlibro cloud API and documents the device property model that made this local MQTT app possible. If you want cloud-based control alongside or instead of local control, that integration is the place to start.
@@ -283,32 +258,3 @@ Thanks to [@MechanicalCoderX](https://github.com/MechanicalCoderX) for responsib
 Thanks also to [@Tp-danny](https://github.com/Tp-danny) for the Granary Smart Feeder capture and for testing feed amount calibration with a real scale, and to [@avgizmo](https://github.com/avgizmo), [@jemp](https://github.com/jemp) and [@JamieSBenson](https://github.com/JamieSBenson) for the logs and reports that helped track down the delayed-feeding problem.
 
 Thanks to Reddit user u/ski_infection for a detailed analysis of how the One RFID feeder reboots and keeps its clock, and for notes on its LED display protocol and time-sync messages, which shaped the clock handling and the LED animations.
-
----
-
-## Dedicated to Kaylee
-
-<div align="center">
-
-<img src="images/kaylee.png" alt="Kaylee" width="300">
-
-*April 22, 2014 – August 15, 2026*
-
-</div>
-
-This project is dedicated to Kaylee, the sweetest, gentlest dog. I'll miss you until the end of time.
-
----
-
-## Keywords
-
-**Devices:** Petlibro, Dockstream, smart fountain, pet water fountain, pet feeder, RFID feeder  
-**Features:** local MQTT, no cloud, credential capture, water level, filter days, pump control, light control, MQTT discovery, HA entities, automations, Alexa, feed now, last fed, next meal, volume control, LED animations  
-**Software:** Home Assistant, Home Assistant app, Supervisor, Mosquitto, MQTT, local control
-
-<!-- 
-SEO Keywords: petlibro local, petlibro home assistant, petlibro mqtt, petlibro no cloud,
-petlibro local control, dockstream 2 home assistant, petlibro add-on, petlibro app,
-home assistant pet fountain, home assistant pet app, local mqtt fountain,
-petlibro integration, smcneece, petlibro-local
--->

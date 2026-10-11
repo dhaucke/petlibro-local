@@ -116,7 +116,6 @@
     padding: 2px 0;
   }
   .about-link:hover { text-decoration: underline; }
-  .about-sponsor { color: #e07eb0; }
   .btn-about-header {
     font-size: 13px;
     color: var(--pl-subtext);

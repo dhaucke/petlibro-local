@@ -22,7 +22,7 @@ Back to the [README](../README.md). The table of supported devices is there; the
 | One RFID Smart Feeder | 2.0.47 | 4.0.0 |
 | Dockstream 2 Smart Fountain | 0.0.34 | 1.0.0 |
 
-I don't have a firmware version for the Granary, the cordless fountain, or the RFID fountain. If yours shows a different one (it's at the top of the device's modal), please [open an issue](https://github.com/smcneece/petlibro-local/issues) and tell me, since newer firmware may behave differently.
+I don't have a firmware version for the Granary, the cordless fountain, or the RFID fountain. Newer firmware may behave differently.
 
 ## Adding a new device type
 

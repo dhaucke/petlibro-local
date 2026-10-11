@@ -1,6 +1,6 @@
 # Petlibro Local Changelog
 
-For full release notes and details on each version, see the [GitHub Releases page](https://github.com/smcneece/petlibro-local/releases).
+For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
 ## 2026.10.2 (dhaucke fork)
 - Web server only accepts requests from the Supervisor ingress proxy (172.30.32.2). Before, `/api/*` accepted the whole 172.30.32.0/23 network (every other add-on container) and the UI, images and scripts were open to the LAN. `/audio/*` stays open because feeders fetch custom sounds directly
@@ -9,6 +9,7 @@ For full release notes and details on each version, see the [GitHub Releases pag
 - Mosquitto logins that Petlibro Local did not create itself are never changed or removed (before, a device username matching an existing login overwrote its password, and deleting the device removed it)
 - `hassio_role: manager` instead of `admin` (all the app needs is managing the Mosquitto add-on), removed the unused `share:rw` mapping
 - Pinned the base image (`base-python:3.13-alpine3.24-2026.08.0`) and Python packages (`aiohttp==3.14.3`, `aiomqtt==2.5.1`, `tzdata==2026.4`)
+- Fork cleanup: links point to this fork, removed the sponsor link, issue/feature links, the upstream maintainer's contact address, issue templates and the changelog-to-issue workflow
 
 ## Unreleased
 - New per-feeder "Food Amount Unit" choice in the Schedule tab for the One RFID and Granary feeders, matching the Petlibro app's own Food Amount setting: cup, ounces, grams or milliliters (or Automatic, which keeps following Settings > Units exactly as before). One portion is 1/12 cup or 20 ml, as the Petlibro app shows it. Cups and ml are the feeder's fixed scoop volume, while grams and ounces depend on your food (10 g per portion unless you calibrate)
