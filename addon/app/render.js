@@ -106,7 +106,20 @@ function renderDevices() {
         <div class="card-name">${escHtml(d.name || d.device_type || d.serial)}</div>
         <div class="card-room">${escHtml(d.room || "")}</div>
         <div class="card-stats">
-          ${isFeeder ? `
+          ${d.device_type === "polar" ? `
+          <div class="card-stat">
+            <div class="stat-label">${t("polar.temperature")}</div>
+            <div class="stat-value accent">${d.temperature != null ? `${Number(d.temperature).toFixed(1)} °C` : "—"}</div>
+          </div>
+          <div class="card-stat">
+            <div class="stat-label">${t("polar.plate")}</div>
+            <div class="stat-value">${d.platePosition ?? "—"}</div>
+          </div>
+          <div class="card-stat stat-secondary">
+            <div class="stat-label">${t("polar.status")}</div>
+            <div class="stat-value${d.feeding ? " accent" : ""}">${d.feeding ? t("polar.feeding") : t("polar.idle")}</div>
+          </div>
+          ` : isFeeder ? `
           <div class="card-stat">
             <div class="stat-label">${t("card.food")}</div>
             <div class="stat-value${d.surplusGrain === false ? " danger" : " accent"}">${d.surplusGrain === false ? t("food.low") : d.surplusGrain === true ? t("food.ok") : "—"}</div>

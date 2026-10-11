@@ -45,6 +45,7 @@ If you are not comfortable with these terms, do not use this software.
 | Dockstream RFID Smart Fountain | WF02 | PLWF305 | Beta |
 | One RFID Smart Feeder | AF06 | PLAF301 | Supported |
 | Granary Smart Feeder | AF01 | PLAF103 | Beta |
+| Polar Wet Food Feeder | AF05 | PLAF109 | Beta: feed now, stop, plate, light, sound, temperature; feeding plans in the Petlibro app via Cloud relay |
 
 Notes on each model (the Granary's missing lid and RFID, the WF01 labeling, serial color codes, and the model numbers) are in [Supported device notes](docs/devices.md), along with the firmware versions I have seen.
 

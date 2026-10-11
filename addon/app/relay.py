@@ -31,7 +31,7 @@ RETRY_SECS = 30
 QUEUE_MAX = 200
 REPLY_TIMEOUT_SECS = 15
 # Device requests that need an answer (the add-on's local handlers answer the same ones)
-_REQUESTS = ("NTP", "GET_FEEDING_PLAN_EVENT", "DEVICE_START_EVENT", "GRAIN_OUTPUT_EVENT")
+_REQUESTS = ("NTP", "GET_FEEDING_PLAN_EVENT", "DEVICE_START_EVENT", "GRAIN_OUTPUT_EVENT", "WET_GRAIN_OUTPUT_EVENT")
 
 _tasks: dict[str, asyncio.Task] = {}
 _queues: dict[str, asyncio.Queue] = {}

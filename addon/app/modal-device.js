@@ -65,6 +65,7 @@ function openDeviceModal(device) {
     if (b.dataset.dtab === "schedule") b.style.display = isFeeder ? "" : "none";
     if (b.dataset.dtab === "led") b.style.display = device.device_type === "one_rfid" ? "" : "none";
     if (b.dataset.dtab === "controls") b.style.display = isFountain ? "" : "none";
+    if (b.dataset.dtab === "maintenance") b.style.display = device.device_type === "polar" ? "none" : "";
   });
 
   renderDeviceTab("overview");
@@ -83,7 +84,7 @@ function renderDeviceTab(tabName) {
   else if (tabName === "maintenance") content.innerHTML = buildMaintenanceTab(_currentDevice);
   else if (tabName === "log") {
     content.innerHTML = `<p style="color:var(--pl-subtext);padding:16px 0;text-align:center">${t("device_modal.loading")}</p>`;
-    if (_currentDevice.device_type === "one_rfid" || _currentDevice.device_type === "granary") {
+    if (["one_rfid", "granary", "polar"].includes(_currentDevice.device_type)) {
       api("GET", `/api/devices/${_currentDevice.serial}/feeder-log`)
         .then(log => { content.innerHTML = buildFeederLogTab(_currentDevice, log); })
         .catch(() => { content.innerHTML = `<p style="color:var(--pl-danger);padding:16px 0">${t("device_modal.load_failed_log")}</p>`; });
@@ -236,6 +237,48 @@ function buildOverviewTab(device) {
     <div style="background:rgba(224,168,85,.12);border:1px solid rgba(224,168,85,.5);color:var(--pl-warning);border-radius:var(--pl-radius-sm);padding:10px 12px;font-size:13px;margin-top:14px;line-height:1.5">
       ${t("overview.no_pets")}
     </div>` : ""}`;
+  }
+
+  if (device.device_type === "polar") {
+    // Polar wet feeder (PLAF109), see device_types/feeders/polar.py
+    const plate = device.platePosition;
+    const plateBtns = [1, 2, 3].map(n =>
+      `<button class="${plate === n ? "btn-primary" : "btn-secondary"} polar-plate" data-plate="${n}" style="flex:1">${n}</button>`).join("");
+    const lastFed = device.last_fed_ts ? `${fmtDate(device.last_fed_ts * 1000)} ${fmtTime(device.last_fed_ts * 1000)}` : "—";
+    return `<div class="detail-stats">
+      <div class="detail-stat" style="padding:8px 14px">
+        <div class="detail-stat-label">${t("polar.temperature")}</div>
+        <div class="detail-stat-value accent">${device.temperature != null ? `${Number(device.temperature).toFixed(1)} °C` : "—"}</div>
+      </div>
+      <div class="detail-stat" style="padding:8px 14px">
+        <div class="detail-stat-label">${t("polar.status")}</div>
+        <div class="detail-stat-value${device.feeding ? " accent" : ""}">${device.feeding ? t("polar.feeding") : t("polar.idle")}</div>
+      </div>
+      <div class="detail-stat" style="padding:8px 14px">
+        <div class="detail-stat-label">${t("card.last_fed")}</div>
+        <div class="detail-stat-value">${escHtml(lastFed)}</div>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <div class="tab-section-heading">${t("polar.plate")}</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">${plateBtns}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-primary" id="btn-polar-feed" style="flex:1">${t("overview.feed_now")}</button>
+        <button class="btn-secondary" id="btn-polar-stop" style="flex:1">${t("polar.stop")}</button>
+      </div>
+      <p class="form-hint">${t("polar.feed_hint")}</p>
+    </div>
+    <div class="toggle-list" style="margin-top:16px">
+      <div class="toggle-row">
+        <span class="toggle-label">${t("overview.light")}</span>
+        <button class="toggle-switch ${device.lightSwitch ? "sw-on" : "sw-off"}" id="ctrl-polar-light"></button>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">${t("overview.sound")}</span>
+        <button class="toggle-switch ${device.soundSwitch ? "sw-on" : "sw-off"}" id="ctrl-polar-sound"></button>
+      </div>
+    </div>
+    <p class="form-hint">${t("polar.plans_hint")}</p>`;
   }
 
   if (device.device_type === "granary") {
@@ -653,7 +696,8 @@ function buildFeederLogTab(device, entries) {
 
     let line;
     if (e.type === "food_dispensed") {
-      const portions = fmtPortions(e.portions, device.calibrated_grams_per_portion, device.feed_unit);
+      const portions = e.plate != null ? t("polar.plate_n", {n: e.plate})
+        : fmtPortions(e.portions, device.calibrated_grams_per_portion, device.feed_unit);
       const key = e.source === "manual" ? "log.food_dispensed_manual"
         : e.source === "scheduled" ? "log.food_dispensed_scheduled"
         : "log.food_dispensed"; // older entries logged before this distinction existed
@@ -1143,13 +1187,15 @@ function buildNotificationsTab(device) {
     { key: "missed_feed",     label: t("notif.missed_feed") },
     { key: "food_dispensed",  label: t("notif.food_dispensed"), defaultOn: false },
     { key: "offline",         label: t("notif.offline") },
+  ] : device.device_type === "polar" ? [
+    { key: "offline",         label: t("notif.offline") },
   ] : [
     { key: "water_low",    label: t("notif.water_low") },
     { key: "filter_due",   label: t("notif.filter_due") },
     { key: "cleaning_due", label: t("notif.cleaning_due") },
     { key: "offline",      label: t("notif.offline") },
   ];
-  const devMobileOptions = `<option value="">-- Default from Settings --</option>` +
+  const devMobileOptions = `<option value="">${t("notif.mobile_default")}</option>` +
     _mobileTargets.map(t =>
       `<option value="${escHtml(t.service)}"${device.notify_mobile_service === t.service ? " selected" : ""}>${escHtml(t.label)}</option>`
     ).join("") +
@@ -1419,6 +1465,38 @@ function wireDeviceTabHandlers(tabName) {
       };
     };
     granaryToggle("ctrl-granary-light", "lightSwitch");
+
+    // Polar wet feeder
+    const polarSend = async (btn, body, patch) => {
+      const orig = btn.textContent;
+      btn.disabled = true;
+      try {
+        await api("POST", `/api/devices/${d.serial}/command`, body);
+        if (patch) { _patchDevice(d.serial, patch); renderDeviceTab("overview"); return; }
+        btn.textContent = t("overview.sent");
+      } catch(e) {
+        btn.textContent = t("overview.failed");
+      }
+      setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+    };
+    document.querySelectorAll(".polar-plate").forEach(btn => {
+      btn.onclick = () => polarSend(btn, { _plate_position: Number(btn.dataset.plate) }, { platePosition: Number(btn.dataset.plate) });
+    });
+    const polarFeed = document.getElementById("btn-polar-feed");
+    // The plate shown as selected, even before the feeder confirms having turned
+    if (polarFeed) polarFeed.onclick = () => polarSend(polarFeed, { _feed_now: true, _plate: _currentDevice.platePosition });
+    const polarStop = document.getElementById("btn-polar-stop");
+    if (polarStop) polarStop.onclick = () => polarSend(polarStop, { _stop_feeding: true });
+    const polarLight = document.getElementById("ctrl-polar-light");
+    if (polarLight) polarLight.onclick = () => {
+      const on = !polarLight.classList.contains("sw-on");
+      polarSend(polarLight, { _light: on }, { lightSwitch: on });
+    };
+    const polarSound = document.getElementById("ctrl-polar-sound");
+    if (polarSound) polarSound.onclick = () => {
+      const on = !polarSound.classList.contains("sw-on");
+      polarSend(polarSound, { _sound: on }, { soundSwitch: on });
+    };
     granaryToggle("ctrl-granary-lock", "disableHardwareButton");
     const granaryVolume = document.getElementById("feeder-granary-volume");
     if (granaryVolume) {

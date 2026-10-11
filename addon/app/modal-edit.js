@@ -183,6 +183,8 @@ const DEVICE_TYPE_MAP = {
   // real MQTT capture -- wire model is PLAF103, same as the box number this
   // time (no discrepancy).
   "AF01": { device_type: "granary",              model: "AF01" },
+  // AF05: Polar Wet Food Feeder, wire model PLAF109 (capture 2026-10-11)
+  "AF05": { device_type: "polar",                model: "AF05" },
 };
 const DEVICE_MQTT_MODELS = {
   "dockstream2":          "plwf106",

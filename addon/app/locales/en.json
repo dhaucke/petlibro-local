@@ -548,5 +548,14 @@
   "settings.emqx_api_hint": "Lets the add-on create the device logins in EMQX's built-in user database. Create the key in the EMQX dashboard under System → API Keys. Not needed with Mosquitto.",
   "broker.login_manual": "The device login could not be created or checked in EMQX automatically. Enter the EMQX API key in Settings → MQTT and press Re-save Credentials, or check the login in the EMQX dashboard yourself (username and password are under Edit; a login with this name that was not created here is left unchanged).",
   "settings.broker_addon": "Broker add-on (optional)",
-  "settings.broker_addon_hint": "Leave empty: the add-on finds Mosquitto or EMQX by itself. Only if both run, enter the slug of the one in use (core_mosquitto or the EMQX slug, e.g. a0d7b954_emqx)."
+  "settings.broker_addon_hint": "Leave empty: the add-on finds Mosquitto or EMQX by itself. Only if both run, enter the slug of the one in use (core_mosquitto or the EMQX slug, e.g. a0d7b954_emqx).",
+  "polar.temperature": "Temperature",
+  "polar.plate": "Plate",
+  "polar.plate_n": "plate {n}",
+  "polar.status": "Status",
+  "polar.feeding": "Feeding",
+  "polar.idle": "Idle",
+  "polar.stop": "Stop feeding",
+  "polar.feed_hint": "Feed now opens the lid over the plate in front. Pick the plate first; Stop feeding closes the lid early.",
+  "polar.plans_hint": "Feeding plans for this feeder are made in the Petlibro app (keep the Cloud relay on)."
 }

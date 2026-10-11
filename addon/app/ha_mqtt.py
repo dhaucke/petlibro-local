@@ -24,6 +24,7 @@ _MODEL_NAMES = {
     "dockstream_rfid":      "Dockstream RFID Smart Fountain",
     "one_rfid":             "One RFID Smart Feeder",
     "granary":              "Granary Smart Feeder",
+    "polar":                "Polar Wet Food Feeder",
 }
 
 _FOUNTAIN_TYPES = {"dockstream2", "dockstream2_cordless", "dockstream_rfid"}
@@ -440,6 +441,63 @@ def _entity_configs(serial: str, cfg: dict, state: dict, extra_icon_names: list[
             "icon":          "mdi:volume-high",
         })))
 
+    # ── Polar Wet Food Feeder (PLAF109) ─────────────────────────────────────
+    elif device_type == "polar":
+        entities.append(("sensor", "temperature", _e(serial, "temperature", b, {
+            "name":                "Temperature",
+            "state_topic":         state_topic(serial, "temperature"),
+            "unit_of_measurement": "°C",
+            "device_class":        "temperature",
+            "state_class":         "measurement",
+        })))
+        entities.append(("select", "plate", _e(serial, "plate", b, {
+            "name":          "Plate",
+            "state_topic":   state_topic(serial, "plate"),
+            "command_topic": cmd_topic(serial, "plate"),
+            "options":       ["1", "2", "3"],
+            "icon":          "mdi:rotate-right",
+        })))
+        entities.append(("binary_sensor", "feeding", _e(serial, "feeding", b, {
+            "name":         "Feeding",
+            "state_topic":  state_topic(serial, "feeding"),
+            "payload_on":   "ON",
+            "payload_off":  "OFF",
+            "device_class": "running",
+        })))
+        entities.append(("sensor", "last_fed", _e(serial, "last_fed", b, {
+            "name":         "Last Fed",
+            "state_topic":  state_topic(serial, "last_fed"),
+            "device_class": "timestamp",
+        })))
+        entities.append(("button", "feed_now", _e(serial, "feed_now", b, {
+            "name":          "Feed Now",
+            "command_topic": cmd_topic(serial, "feed_now"),
+            "payload_press": "PRESS",
+            "icon":          "mdi:food-drumstick",
+        })))
+        entities.append(("button", "stop_feeding", _e(serial, "stop_feeding", b, {
+            "name":          "Stop Feeding",
+            "command_topic": cmd_topic(serial, "stop_feeding"),
+            "payload_press": "PRESS",
+            "icon":          "mdi:stop-circle-outline",
+        })))
+        entities.append(("switch", "light", _e(serial, "light", b, {
+            "name":          "Light",
+            "state_topic":   state_topic(serial, "light"),
+            "command_topic": cmd_topic(serial, "light"),
+            "payload_on":    "ON",
+            "payload_off":   "OFF",
+            "icon":          "mdi:lightbulb",
+        })))
+        entities.append(("switch", "sound", _e(serial, "sound", b, {
+            "name":          "Sound",
+            "state_topic":   state_topic(serial, "sound"),
+            "command_topic": cmd_topic(serial, "sound"),
+            "payload_on":    "ON",
+            "payload_off":   "OFF",
+            "icon":          "mdi:volume-high",
+        })))
+
     return entities
 
 
@@ -502,6 +560,9 @@ def get_command_topics(serial: str, device_type: str) -> list[str]:
         topics.append(cmd_topic(serial, "volume"))
         topics.append(cmd_topic(serial, "light"))
         topics.append(cmd_topic(serial, "buttons_lock"))
+    elif device_type == "polar":
+        for key in ("feed_now", "stop_feeding", "plate", "light", "sound"):
+            topics.append(cmd_topic(serial, key))
     return topics
 
 
@@ -720,6 +781,25 @@ async def publish_state(client, serial: str, cfg: dict, state: dict, plans: list
             val = "ON" if state["disableHardwareButton"] else "OFF"
             await client.publish(state_topic(serial, "buttons_lock"), val, retain=True)
 
+    elif device_type == "polar":
+        await _publish_polar_state(client, serial, cfg, state)
+
+
+async def _publish_polar_state(client, serial: str, cfg: dict, state: dict):
+    if state.get("temperature") is not None:
+        await client.publish(state_topic(serial, "temperature"), str(state["temperature"]), retain=True)
+    if state.get("platePosition") in (1, 2, 3):
+        await client.publish(state_topic(serial, "plate"), str(state["platePosition"]), retain=True)
+    await client.publish(state_topic(serial, "feeding"), "ON" if state.get("feeding") else "OFF", retain=True)
+    if "lightSwitch" in state:
+        await client.publish(state_topic(serial, "light"), "ON" if state["lightSwitch"] else "OFF", retain=True)
+    if "soundSwitch" in state:
+        await client.publish(state_topic(serial, "sound"), "ON" if state["soundSwitch"] else "OFF", retain=True)
+    last_fed = cfg.get("last_fed_ts")
+    if last_fed:
+        dt = datetime.datetime.fromtimestamp(int(last_fed), tz=datetime.timezone.utc)
+        await client.publish(state_topic(serial, "last_fed"), dt.isoformat(), retain=True)
+
 
 def parse_command(topic: str, payload: str, device_type: str = "") -> dict | None:
     """Parse an HA command topic into a device payload dict.
@@ -734,6 +814,15 @@ def parse_command(topic: str, payload: str, device_type: str = "") -> dict | Non
 
     if key == "pump":
         return {"waterStopSwitch": 0 if payload == "ON" else 1}
+    if device_type == "polar":
+        if key == "light":
+            return {"_light": payload == "ON"}
+        if key == "plate":
+            return {"_plate_position": payload} if payload in ("1", "2", "3") else None
+        if key == "stop_feeding":
+            return {"_stop_feeding": True}
+        if key == "sound":
+            return {"_sound": payload == "ON"}
     if key == "light":
         if device_type == "one_rfid":
             return {"screenDisplaySwitch": payload == "ON"}

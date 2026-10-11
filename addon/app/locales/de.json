@@ -548,5 +548,14 @@
   "settings.emqx_api_hint": "Damit legt das Add-on die Geräte-Logins in der eingebauten Benutzerdatenbank von EMQX an. Den Schlüssel erstellst du im EMQX-Dashboard unter System → API-Schlüssel. Mit Mosquitto nicht nötig.",
   "broker.login_manual": "Der Geräte-Login konnte in EMQX nicht automatisch angelegt oder geprüft werden. Trag den EMQX-API-Schlüssel unter Einstellungen → MQTT ein und drück „Zugangsdaten erneut speichern“, oder prüf den Login im EMQX-Dashboard selbst (Benutzername und Passwort stehen unter „Bearbeiten“; ein nicht hier angelegter Login mit diesem Namen bleibt unverändert).",
   "settings.broker_addon": "Broker-Add-on (optional)",
-  "settings.broker_addon_hint": "Leer lassen: Das Add-on findet Mosquitto oder EMQX selbst. Nur wenn beide laufen, trag den Slug des genutzten ein (core_mosquitto oder den EMQX-Slug, z. B. a0d7b954_emqx)."
+  "settings.broker_addon_hint": "Leer lassen: Das Add-on findet Mosquitto oder EMQX selbst. Nur wenn beide laufen, trag den Slug des genutzten ein (core_mosquitto oder den EMQX-Slug, z. B. a0d7b954_emqx).",
+  "polar.temperature": "Temperatur",
+  "polar.plate": "Teller",
+  "polar.plate_n": "Teller {n}",
+  "polar.status": "Status",
+  "polar.feeding": "Füttert",
+  "polar.idle": "Bereit",
+  "polar.stop": "Füttern stoppen",
+  "polar.feed_hint": "„Jetzt füttern“ öffnet den Deckel über dem vorderen Teller. Wähl vorher den Teller; „Füttern stoppen“ schließt den Deckel vorzeitig.",
+  "polar.plans_hint": "Fütterungspläne für diesen Futterautomaten legst du in der Petlibro-App an (Cloud-Relay eingeschaltet lassen)."
 }

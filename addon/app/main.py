@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2026.10.6"
+VERSION = "2026.10.7"
 
 # Credential capture state
 _capture_state: dict = {"status": "idle", "result": {}}

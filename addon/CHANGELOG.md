@@ -2,6 +2,11 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
+## 2026.10.7
+- New device: **Polar Wet Food Feeder (PLAF109)**, built from a capture of the Petlibro app against the real cloud (fw 2.0.38). Feed now (on the chosen plate), stop feeding, choose plate 1-3, light, sound, temperature, feeding status and last fed, in the add-on and as Home Assistant entities. Feeding runs are logged with their plate. With the Cloud relay the Petlibro app keeps working for it too. Feeding plans stay in the Petlibro app (they reach the feeder through the relay); a Next Meal sensor is left out because the capture does not show which timezone the plan times are in. Not built: the ringer mode (values seen, meaning unknown), volume and cleaning reset (not in the captures)
+- The device's dispense steps are acked locally when the cloud does not answer, like the other feeders
+- "Default from Settings" in a device's alert settings is translated now
+
 ## 2026.10.6
 - Commands go to the model a device uses in its own MQTT topics (`dl/<model>/...`), learned from its messages and remembered, instead of the model its device type implies. A device whose wire model differs from its type (for example a Dockstream sold as PLWF105) showed data but ignored every command, because commands went to a topic it does not listen on
 

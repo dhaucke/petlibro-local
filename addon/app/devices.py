@@ -860,6 +860,10 @@ async def _handle_ha_command(serial: str, topic: str, payload: str):
     if cmd is None:
         _LOGGER.warning("Unrecognised HA command topic: %s", topic)
         return
+    polar_ok = await polar_command(serial, cmd)
+    if polar_ok is not None:
+        _LOGGER.info("HA Polar command %s... %s: %s", serial[:6], list(cmd), "ok" if polar_ok else "failed")
+        return
     if cmd.get("_feed_now"):
         ok = await send_command(serial, {"cmd": "MANUAL_FEEDING_SERVICE", "grainNum": 1})
         _LOGGER.info("HA Feed Now %s...: %s", serial[:6], "ok" if ok else "failed")
@@ -921,6 +925,12 @@ async def _handle_ha_command(serial: str, topic: str, payload: str):
 
 async def handle_ha_command(serial: str, cmd: dict) -> None:
     """Public entry-point for API-driven commands (already-parsed dict)."""
+    polar_ok = await polar_command(serial, cmd)
+    if polar_ok is not None:
+        _LOGGER.info("API Polar command %s... %s: %s", serial[:6], list(cmd), "ok" if polar_ok else "failed")
+        if not polar_ok:
+            raise RuntimeError("command was not sent")
+        return
     if cmd.get("_feed_now"):
         ok = await send_command(serial, {"cmd": "MANUAL_FEEDING_SERVICE", "grainNum": 1})
         _LOGGER.info("API Feed Now %s...: %s", serial[:6], "ok" if ok else "failed")
@@ -1343,9 +1353,20 @@ def _handle_message(serial: str, topic_str: str, raw: str):
         rssi = data.get("rssi")
         if rssi is not None:
             _state.setdefault(serial, {})["rssi"] = rssi
+        if data.get("temperature") is not None:  # Polar wet feeder (PLAF109)
+            _state.setdefault(serial, {})["temperature"] = data["temperature"]
         _mark_online(serial)
         asyncio.ensure_future(_check_device_clock(serial, data.get("ts")))
         asyncio.ensure_future(_check_and_fire_alerts(serial))
+        asyncio.ensure_future(_publish_ha_state(serial))
+        return
+
+    if cmd == "WET_GRAIN_OUTPUT_EVENT":
+        # Polar wet feeder: one message per step, the cloud acks each (OBSERVED)
+        if not relay.is_passive(serial):
+            asyncio.ensure_future(_publish_wet_ack(topic_str, data))
+        _handle_wet_feed_step(serial, data)
+        _mark_online(serial)
         asyncio.ensure_future(_publish_ha_state(serial))
         return
 
@@ -2415,6 +2436,84 @@ async def _mqtt_loop():
                 asyncio.ensure_future(_check_and_fire_alerts(serial))
 
 
+async def _publish_wet_ack(event_topic: str, data: dict) -> None:
+    import time as _time
+    if _client_ref is None:
+        return
+    ack = json.dumps({
+        "cmd":      "WET_GRAIN_OUTPUT_EVENT",
+        "ts":       int(_time.time() * 1000),
+        "msgId":    data.get("msgId", ""),
+        "code":     0,
+        "execStep": data.get("execStep", ""),
+    })
+    try:
+        await _client_ref.publish(event_topic.replace("/post", "/sub"), ack)
+    except Exception:
+        pass
+
+
+def _handle_wet_feed_step(serial: str, data: dict) -> None:
+    """Track a Polar wet feeder's feeding: running while steps arrive, logged
+    once GRAIN_END reports finished."""
+    import time as _time
+    import storage as _storage
+    from device_types.feeders import polar as _polar
+    state = _state.setdefault(serial, {})
+    step = data.get("execStep", "")
+    state["feedStep"] = step
+    state["feeding"] = not data.get("finished") and step != "GRAIN_END"
+    if data.get("plate") is not None:
+        state["feedPlate"] = data["plate"]
+    if data.get("finished") and step == "GRAIN_END":
+        # The feeder can send GRAIN_END twice (seen in the capture): log a run once
+        run = (data.get("planId"), data.get("execTime"))
+        if state.get("_last_wet_end") == list(run):
+            return
+        state["_last_wet_end"] = list(run)
+        source = "manual" if data.get("planId") == _polar.FEED_NOW_PLAN_ID else "scheduled"
+        _storage.log_feeder_event(serial, "food_dispensed", portions=0,
+                                  extra={"source": source, "plate": data.get("plate")})
+        _storage.save_device(serial, {"last_fed_ts": int(_time.time())})
+
+
+async def polar_command(serial: str, cmd: dict) -> bool | None:
+    """Polar wet feeder commands (captured from the Petlibro app). None = not one of them."""
+    import datetime as _dt
+    from device_types.feeders import polar as _polar
+    if _devices.get(serial, (None, ""))[1] != "polar":
+        return None
+    state = _state.get(serial, {})
+    if cmd.get("_feed_now"):
+        import storage as _storage
+        from zoneinfo import ZoneInfo
+        tz_name = _storage.get_settings().get("feeder_timezone", "")
+        try:
+            now = _dt.datetime.now(ZoneInfo(tz_name)) if tz_name else _dt.datetime.now().astimezone()
+        except Exception:
+            now = _dt.datetime.now().astimezone()
+        plate = int(cmd.get("_plate") or state.get("platePosition") or 1)
+        return await send_command(serial, {"cmd": "WET_GRAIN_FEEDING_PLAN_SERVICE", "plans": [{
+            "planId": _polar.FEED_NOW_PLAN_ID, "executionTime": now.strftime("%H:%M"),
+            "executionDay": now.strftime("%Y-%m-%d"), "plate": plate,
+            "feedingDuration": _polar.FEED_NOW_DURATION, "feedNowState": True}]})
+    if cmd.get("_stop_feeding"):
+        return await send_command(serial, {"cmd": "WET_FOOD_FEED_STOP_SERVICE", "planId": _polar.FEED_NOW_PLAN_ID})
+    if "_plate_position" in cmd:
+        plate = int(cmd["_plate_position"])
+        if plate not in (1, 2, 3):
+            return False
+        return await send_command(serial, {"cmd": "SET_PLATE_POS_SERVICE", "platePosition": plate})
+    if "_light" in cmd:
+        return await send_command(serial, {"lightSwitch": bool(cmd["_light"]),
+                                           "lightAgingType": state.get("lightAgingType", 1)})
+    if "_sound" in cmd:
+        return await send_command(serial, {"soundSwitch": bool(cmd["_sound"]),
+                                           "soundAgingType": state.get("soundAgingType", 1)})
+    return None
+
+
+
 async def _answer_locally(serial: str, topic_str: str, payload) -> None:
     """Answer a request that was left to the cloud, after the relay failed to
     deliver it. Only the reply is sent: the message itself (logs, state, food
@@ -2432,6 +2531,8 @@ async def _answer_locally(serial: str, topic_str: str, payload) -> None:
         await _publish_start_ack(serial, topic_str, data)
     elif cmd == "GRAIN_OUTPUT_EVENT":
         await _publish_grain_ack(topic_str, data)
+    elif cmd == "WET_GRAIN_OUTPUT_EVENT":
+        await _publish_wet_ack(topic_str, data)
 
 
 def _adopt_cloud_plans(serial: str, plans: list) -> None:
@@ -2455,6 +2556,7 @@ async def _local_publish(topic: str, payload) -> None:
             and data.get("cmd") == "GET_FEEDING_PLAN_EVENT" and data.get("code", 0) == 0
             and isinstance(data.get("plans"), list)):
         _adopt_cloud_plans(parts[2], data["plans"])
+
     if _client_ref is not None:
         await _client_ref.publish(topic, payload)
 
