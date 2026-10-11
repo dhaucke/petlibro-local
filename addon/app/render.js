@@ -120,6 +120,10 @@ function renderDevices() {
             <div class="stat-label">${t("polar.status")}</div>
             <div class="stat-value${d.feeding ? " accent" : ""}">${d.feeding ? t("polar.feeding") : t("polar.idle")}</div>
           </div>
+          <div class="card-stat stat-secondary">
+            <div class="stat-label">${t("card.battery")}</div>
+            <div class="stat-value${d.electricQuantity > 0 && d.electricQuantity <= (d.battery_low_pct ?? 20) ? " danger" : ""}">${d.electricQuantity > 0 ? `${d.electricQuantity}%` : "—"}</div>
+          </div>
           ` : isFeeder ? `
           <div class="card-stat">
             <div class="stat-label">${t("card.food")}</div>

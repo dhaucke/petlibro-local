@@ -74,7 +74,7 @@ def test_polar_home_assistant_entities(tmp_path, monkeypatch):
     monkeypatch.setattr(storage, "DATA_FILE", str(tmp_path / "data.json"))
     cfg = {"device_type": "polar", "name": "Nassfutter"}
     keys = {key for _, key, _ in ha_mqtt._entity_configs("AF05TEST", cfg, {})}
-    assert {"temperature", "plate", "feeding", "feed_now", "stop_feeding", "light", "sound"} <= keys
+    assert {"battery", "temperature", "plate", "feeding", "feed_now", "stop_feeding", "light", "sound"} <= keys
     assert ha_mqtt.parse_command("petlibro_local/AF05TEST/plate/set", "2", "polar") == {"_plate_position": "2"}
     assert ha_mqtt.parse_command("petlibro_local/AF05TEST/light/set", "ON", "polar") == {"_light": True}
     assert ha_mqtt.parse_command("petlibro_local/AF05TEST/stop_feeding/set", "PRESS", "polar") == {"_stop_feeding": True}
@@ -88,3 +88,10 @@ def test_polar_home_assistant_entities(tmp_path, monkeypatch):
     assert client.sent[ha_mqtt.state_topic("AF05TEST", "plate")] == "3"
     assert client.sent[ha_mqtt.state_topic("AF05TEST", "feeding")] == "ON"
     assert client.sent[ha_mqtt.state_topic("AF05TEST", "light")] == "ON"
+
+
+def test_polar_battery_alert():
+    from device_types.feeders import polar
+    assert polar.compute_alerts({"electricQuantity": 0}, {}, True) == set()  # no battery fitted
+    assert polar.compute_alerts({"electricQuantity": 15}, {}, True) == {"battery_low"}
+    assert polar.compute_alerts({"electricQuantity": 15}, {"battery_low_pct": 0}, True) == set()

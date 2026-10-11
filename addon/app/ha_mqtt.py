@@ -443,6 +443,13 @@ def _entity_configs(serial: str, cfg: dict, state: dict, extra_icon_names: list[
 
     # ── Polar Wet Food Feeder (PLAF109) ─────────────────────────────────────
     elif device_type == "polar":
+        entities.append(("sensor", "battery", _e(serial, "battery", b, {
+            "name":                "Battery",
+            "state_topic":         state_topic(serial, "battery"),
+            "unit_of_measurement": "%",
+            "device_class":        "battery",
+            "state_class":         "measurement",
+        })))
         entities.append(("sensor", "temperature", _e(serial, "temperature", b, {
             "name":                "Temperature",
             "state_topic":         state_topic(serial, "temperature"),
@@ -805,6 +812,8 @@ async def publish_state(client, serial: str, cfg: dict, state: dict, plans: list
 
 
 async def _publish_polar_state(client, serial: str, cfg: dict, state: dict):
+    if "electricQuantity" in state:
+        await client.publish(state_topic(serial, "battery"), str(state["electricQuantity"]), retain=True)
     if state.get("temperature") is not None:
         await client.publish(state_topic(serial, "temperature"), str(state["temperature"]), retain=True)
     if state.get("platePosition") in (1, 2, 3):

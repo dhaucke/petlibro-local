@@ -259,6 +259,10 @@ function buildOverviewTab(device) {
         <div class="detail-stat-label">${t("card.last_fed")}</div>
         <div class="detail-stat-value">${escHtml(lastFed)}</div>
       </div>
+      <div class="detail-stat" style="padding:8px 14px">
+        <div class="detail-stat-label">${t("overview.battery")}</div>
+        <div class="detail-stat-value${device.electricQuantity > 0 && device.electricQuantity <= (device.battery_low_pct ?? 20) ? " danger" : ""}">${device.electricQuantity > 0 ? `${device.electricQuantity}%` : "—"}</div>
+      </div>
     </div>
     <div style="margin-top:16px">
       <div class="tab-section-heading">${t("polar.plate")}</div>
@@ -1204,6 +1208,7 @@ function buildNotificationsTab(device) {
     { key: "offline",         label: t("notif.offline") },
   ] : device.device_type === "polar" ? [
     { key: "offline",         label: t("notif.offline") },
+    // battery_low: threshold row below (0 disables it), like the Granary
   ] : [
     { key: "water_low",    label: t("notif.water_low") },
     { key: "filter_due",   label: t("notif.filter_due") },
@@ -1217,7 +1222,7 @@ function buildNotificationsTab(device) {
     (device.notify_mobile_service && !_mobileTargets.find(t => t.service === device.notify_mobile_service)
       ? `<option value="${escHtml(device.notify_mobile_service)}" selected>${escHtml(device.notify_mobile_service)}</option>` : "");
 
-  const batteryLowRow = isFeeder ? `
+  const batteryLowRow = isFeeder || device.device_type === "polar" ? `
     <div class="toggle-row">
       <span class="toggle-label">${t("notif.battery_low")}</span>
       <input class="form-input" id="notif-battery-low-pct" type="number" min="0" max="99" value="${device.battery_low_pct ?? 20}" style="width:70px;text-align:center">

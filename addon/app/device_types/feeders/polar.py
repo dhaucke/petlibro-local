@@ -29,7 +29,9 @@ MQTT_MODELS = {
     "polar": "PLAF109",
 }
 
-ALERT_MESSAGES = {}
+ALERT_MESSAGES = {
+    "battery_low": "Backup battery is low.",
+}
 
 DEFAULT_NOTIFICATIONS = {}
 
@@ -39,7 +41,14 @@ FEED_NOW_DURATION = 240
 
 
 def compute_alerts(state: dict, cfg: dict, online: bool) -> set:
-    return set()
+    # Backup battery compartment like the Granary: electricQuantity is 0 without
+    # a battery (OBSERVED), so only a real reading can raise the alert
+    alerts = set()
+    threshold = cfg.get("battery_low_pct", 20)
+    pct = state.get("electricQuantity")
+    if threshold > 0 and pct is not None and 0 < pct <= threshold:
+        alerts.add("battery_low")
+    return alerts
 
 
 def track_intake(old_state: dict, new_state: dict, min_grams: float = 5) -> float | None:
