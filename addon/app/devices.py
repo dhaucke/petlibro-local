@@ -146,6 +146,10 @@ _ALERT_MESSAGES:  dict[str, str] = _device_types.all_alert_messages()
 
 # Serials currently subscribed: serial -> (model, device_type)
 _devices: dict[str, tuple[str, str]] = {}
+# Model each device uses in its own topics (dl/<model>/...). Can differ from the
+# one its device type implies (e.g. a fountain sold as PLWF105), and commands
+# only arrive on the device's own model.
+_wire_models: dict[str, str] = {}
 
 _pet_no_eat_alerted: dict[str, bool] = {}
 # In-memory only on purpose (NOT in _state, which gets persisted and reloaded):
@@ -207,6 +211,9 @@ def register_device(serial: str, model: str, device_type: str):
     _devices[serial] = (model, device_type)
     try:
         import storage as _storage
+        wire = _storage.get_devices().get(serial, {}).get("wire_model")
+        if wire:
+            _wire_models[serial] = wire
         cached = _storage.get_device_mqtt_cache(serial)
         if cached:
             # Disk cache may hold a stale powerType/powerMode from before
@@ -291,8 +298,19 @@ def _mark_offline(serial: str):
         asyncio.ensure_future(ha_mqtt.publish_availability(_client_ref, serial, False))
 
 
+def _note_wire_model(serial: str, wire: str) -> None:
+    import storage as _storage
+    expected = _mqtt_model(_devices.get(serial, ("", ""))[1])
+    if wire != expected:
+        _LOGGER.info("Device %s... uses model %s in its topics (type default %s), sending commands there",
+                     serial[:6], wire, expected)
+    _wire_models[serial] = wire
+    _storage.save_device(serial, {"wire_model": wire})
+
+
 def unregister_device(serial: str):
     relay.stop(serial)
+    _wire_models.pop(serial, None)
     _devices.pop(serial, None)
     _state.pop(serial, None)
     _online.pop(serial, None)
@@ -325,16 +343,20 @@ def _mqtt_model(device_type: str) -> str:
     return _DEVICE_MODELS.get(device_type, device_type)
 
 
+def _topic_model(device_type: str, serial: str) -> str:
+    return _wire_models.get(serial) or _mqtt_model(device_type)
+
+
 def _service_sub_topic(device_type: str, serial: str) -> str:
-    return f"dl/{_mqtt_model(device_type)}/{serial}/device/service/sub"
+    return f"dl/{_topic_model(device_type, serial)}/{serial}/device/service/sub"
 
 
 def _ntp_sub_topic(device_type: str, serial: str) -> str:
-    return f"dl/{_mqtt_model(device_type)}/{serial}/device/ntp/sub"
+    return f"dl/{_topic_model(device_type, serial)}/{serial}/device/ntp/sub"
 
 
 def _event_sub_topic(device_type: str, serial: str) -> str:
-    return f"dl/{_mqtt_model(device_type)}/{serial}/device/event/sub"
+    return f"dl/{_topic_model(device_type, serial)}/{serial}/device/event/sub"
 
 
 # ── Commands ───────────────────────────────────────────────────────────────
@@ -2314,7 +2336,7 @@ async def _mqtt_loop():
                 await client.subscribe("dl/#")
 
                 for serial, (_, device_type) in list(_devices.items()):
-                    _LOGGER.info("Registered: %s... model=%s", serial[:6], _mqtt_model(device_type))
+                    _LOGGER.info("Registered: %s... model=%s", serial[:6], _topic_model(device_type, serial))
                     svc_topic    = _service_sub_topic(device_type, serial)
                     init_payload = json.dumps({
                         "cmd":   "ATTR_GET_SERVICE",
@@ -2367,6 +2389,8 @@ async def _mqtt_loop():
                             "recognized": recognized,
                         })
                         _prune_raw_capture(_now)
+                        if recognized and _wire_models.get(serial) != parts[1]:
+                            _note_wire_model(serial, parts[1])
                         if recognized:
                             relay.forward(serial, parts[1], topic_str, message.payload, _local_publish, _answer_locally)
                             _handle_message(serial, topic_str, payload_str)

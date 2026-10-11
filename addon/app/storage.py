@@ -65,7 +65,7 @@ ALLOWED_DEVICE_FIELDS = {
     "display_animation_name",
     "sound_hours_mode", "sound_start_local", "sound_end_local",
     "display_hours_mode", "display_start_local", "display_end_local",
-    "cloud_relay", "mqtt_client_id",
+    "cloud_relay", "mqtt_client_id", "wire_model",
 }
 
 ALLOWED_PET_FIELDS = {

@@ -2,6 +2,9 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
+## 2026.10.6
+- Commands go to the model a device uses in its own MQTT topics (`dl/<model>/...`), learned from its messages and remembered, instead of the model its device type implies. A device whose wire model differs from its type (for example a Dockstream sold as PLWF105) showed data but ignored every command, because commands went to a topic it does not listen on
+
 ## 2026.10.5
 - New Home Assistant binary sensor **Food Low** for the One RFID and Granary feeders (on when the feeder's own food sensor reports the hopper empty or low). Before, the food level only showed in the add-on, not in Home Assistant
 
