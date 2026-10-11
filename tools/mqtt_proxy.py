@@ -8,6 +8,15 @@ a new device type.
 
 Requirements: Python 3.9+, no extra packages needed.
 
+Quick start (no file editing): redirect only the device to capture to this
+machine (e.g. an AdGuard Home custom rule
+  ||mqtt.us.petlibro.com^$dnsrewrite=<this machine's IP>,client=<device IP>),
+then run
+  python3 mqtt_proxy.py --serial AF0201 --cloud mqtt.us.petlibro.com
+--serial is the start of the device's serial (empty = the first Petlibro device
+that connects); --cloud may be a hostname as long as THIS machine still resolves
+it to the real cloud (a per-device rule leaves it alone). Stop with Ctrl+C.
+
 Setup overview
 --------------
 1. Find your device's serial number (visible in the PetLibro app under device
@@ -319,7 +328,7 @@ async def _shutdown_after(seconds: int):
 
 async def _run():
     if SERIAL_PREFIX == "XXXX" or CLOUD_HOST == "0.0.0.0":
-        print("ERROR: fill in SERIAL_PREFIX and CLOUD_HOST at the top of this file before running.")
+        print("ERROR: pass --serial (and --cloud) or fill in SERIAL_PREFIX and CLOUD_HOST at the top of this file.")
         return
     server = await asyncio.start_server(handle_device, "0.0.0.0", LISTEN_PORT)
     _print_and_log(f"[{_ts()}] MQTT proxy :{LISTEN_PORT} -> {CLOUD_HOST}:{CLOUD_PORT}")
@@ -339,6 +348,23 @@ async def _run():
 
 
 if __name__ == "__main__":
+    import argparse
+    import ipaddress
+    import socket
+    parser = argparse.ArgumentParser(description="Transparent Petlibro MQTT proxy that logs both directions")
+    parser.add_argument("--serial", help="start of the device serial to proxy, empty = any Petlibro device")
+    parser.add_argument("--cloud", help="real cloud broker, IP or hostname (default mqtt.us.petlibro.com)")
+    parser.add_argument("--minutes", type=int, help=f"stop after this many minutes (default {RUN_MINUTES}, 0 = no limit)")
+    args = parser.parse_args()
+    if args.serial is not None:
+        SERIAL_PREFIX = args.serial
+    if args.cloud or CLOUD_HOST == "0.0.0.0":
+        CLOUD_HOST = socket.gethostbyname(args.cloud or "mqtt.us.petlibro.com")
+        if ipaddress.ip_address(CLOUD_HOST).is_private:
+            raise SystemExit(f"ERROR: the cloud name resolves to {CLOUD_HOST} on this machine (DNS rewrite?). "
+                             "Pass the real IP: nslookup mqtt.us.petlibro.com 8.8.8.8")
+    if args.minutes is not None:
+        RUN_MINUTES = args.minutes
     try:
         asyncio.run(_run())
     except (KeyboardInterrupt, SystemExit):
