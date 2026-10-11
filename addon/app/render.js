@@ -68,8 +68,9 @@ function renderDevices() {
     const filterDays = filterDaysRemaining(d);
     const cleanDays = cleaningDaysRemaining(d);
     const icon = deviceIcon(d);
-    const imgHtml = d.image_url
-      ? `<img src="${escHtml(d.image_url)}" alt="">`
+    const imgSrc = d.image_url || deviceImageUrl(d.device_type, d.variant);
+    const imgHtml = imgSrc
+      ? `<img src="${escHtml(imgSrc)}" alt="">`
       : `<div class="card-img-placeholder">${icon}</div>`;
     const allPets = d.pets || [];
     const maxPetSlots = 5;

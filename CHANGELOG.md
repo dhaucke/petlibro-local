@@ -2,6 +2,9 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
+## 2026.10.10
+- Device pictures are back, in black and white for every device type (Dockstream RFID: white only), including the new Polar Wet Food Feeder, and the colour choice under Add Device and Edit picks the picture again. They are only shown while a device has no photo of its own; an uploaded photo under Edit always takes precedence
+
 ## 2026.10.9
 - Removed the bundled device photos: they were Petlibro's own product images. A device now shows its icon until you upload your own photo under Edit → Custom Image. Links to the old photos are cleared on start, uploaded photos are kept. The colour choice is gone too, it only picked one of those photos
 

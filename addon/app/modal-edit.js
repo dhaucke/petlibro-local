@@ -61,7 +61,7 @@ async function saveEditDevice() {
   const imageFile = document.getElementById("e-image").files[0];
 
   // Compute image URL from variant (built-in images)
-  let image_url = deviceImageUrl(device.device_type, variant) || device.image_url || "";
+  let image_url = device.image_url || "";
 
   // Custom image upload takes priority
   if (imageFile) {
@@ -186,12 +186,23 @@ const DEVICE_TYPE_MAP = {
   // AF05: Polar Wet Food Feeder, wire model PLAF109 (capture 2026-10-11)
   "AF05": { device_type: "polar",                model: "AF05" },
 };
-// No bundled product photos (they are Petlibro's): a device shows its icon
-// until you upload a photo under Edit. The colour choice only picked a photo,
-// so no variants are offered (populateVariantSelect hides the row).
-const DEVICE_VARIANTS = {};
+// Bundled pictures, images/<device_type>_<b|w>.png. Only a display fallback,
+// never stored, so an uploaded photo (Edit) always wins. The colour choice
+// picks the picture.
+const _BW = [{ value: "b" }, { value: "w" }];
+const DEVICE_VARIANTS = {
+  "dockstream2":          _BW,
+  "dockstream2_cordless": _BW,
+  "dockstream_rfid":      [{ value: "w" }],  // only white seen so far
+  "one_rfid":             _BW,
+  "granary":              _BW,
+  "polar":                _BW,
+};
 function deviceImageUrl(deviceType, variant) {
-  return "";
+  const variants = (DEVICE_VARIANTS[deviceType] || []).map(v => v.value);
+  if (!variants.length) return "";
+  const pick = variants.includes(variant) ? variant : variants[0];
+  return `${BASE}/images/${deviceType}_${pick}`;
 }
 
 function populatePetSection(sectionId, listId, optionalLabelId, deviceType) {

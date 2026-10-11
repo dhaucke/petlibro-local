@@ -115,7 +115,7 @@ async function finishAutoDevice() {
     name: document.getElementById("a-name").value.trim() || t("add_device.default_name"),
     room: document.getElementById("a-room").value.trim(),
     variant: aVariant,
-    image_url: deviceImageUrl(typeEl.value, aVariant),
+    image_url: "",
     pet_ids: selectedPetIds("a-pet-list"),
   };
   try {
@@ -169,7 +169,7 @@ async function finishManualDevice() {
     name: document.getElementById("w-name").value.trim() || t("add_device.default_name"),
     room: document.getElementById("w-room").value.trim(),
     variant: wVariant,
-    image_url: deviceImageUrl(typeEl.value, wVariant),
+    image_url: "",
     pet_ids: selectedPetIds("w-pet-list"),
   };
   try {

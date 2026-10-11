@@ -4,8 +4,9 @@ function openDeviceModal(device) {
   _currentDeviceTab = "overview";
 
   const imgEl = document.getElementById("detail-img");
-  imgEl.innerHTML = device.image_url
-    ? `<img src="${escHtml(device.image_url)}" alt="">`
+  const imgSrc = device.image_url || deviceImageUrl(device.device_type, device.variant);
+  imgEl.innerHTML = imgSrc
+    ? `<img src="${escHtml(imgSrc)}" alt="">`
     : `<span>${deviceIcon(device)}</span>`;
 
   document.getElementById("detail-name").textContent = device.name || device.device_type || device.serial;
