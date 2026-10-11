@@ -272,6 +272,16 @@ def _entity_configs(serial: str, cfg: dict, state: dict, extra_icon_names: list[
             "icon":         "mdi:clock-outline",
         })))
 
+        # surplusGrain is the feeder's own food sensor: true while there is food
+        entities.append(("binary_sensor", "food_low", _e(serial, "food_low", b, {
+            "name":         "Food Low",
+            "state_topic":  state_topic(serial, "food_low"),
+            "payload_on":   "ON",
+            "payload_off":  "OFF",
+            "device_class": "problem",
+            "icon":         "mdi:food-off-outline",
+        })))
+
         entities.append(("sensor", "desiccant_days", _e(serial, "desiccant_days", b, {
             "name":                "Desiccant Days Remaining",
             "state_topic":         state_topic(serial, "desiccant_days"),
@@ -372,6 +382,16 @@ def _entity_configs(serial: str, cfg: dict, state: dict, extra_icon_names: list[
             "state_topic":  state_topic(serial, "next_meal"),
             "device_class": "timestamp",
             "icon":         "mdi:clock-outline",
+        })))
+
+        # surplusGrain is the feeder's own food sensor: true while there is food
+        entities.append(("binary_sensor", "food_low", _e(serial, "food_low", b, {
+            "name":         "Food Low",
+            "state_topic":  state_topic(serial, "food_low"),
+            "payload_on":   "ON",
+            "payload_off":  "OFF",
+            "device_class": "problem",
+            "icon":         "mdi:food-off-outline",
         })))
 
         entities.append(("sensor", "desiccant_days", _e(serial, "desiccant_days", b, {
@@ -608,6 +628,10 @@ async def publish_state(client, serial: str, cfg: dict, state: dict, plans: list
             # Assistant's MQTT sensor resets to unknown on the payload "None".
             await client.publish(state_topic(serial, "next_meal"), next_ts or "None", retain=True)
 
+        if "surplusGrain" in state:
+            val = "OFF" if state["surplusGrain"] else "ON"
+            await client.publish(state_topic(serial, "food_low"), val, retain=True)
+
         last_desiccant = cfg.get("last_desiccant_ts")
         if last_desiccant:
             life_days = cfg.get("desiccant_life_days", 14)
@@ -669,6 +693,10 @@ async def publish_state(client, serial: str, cfg: dict, state: dict, plans: list
             # the retained old value would otherwise stay forever. Home
             # Assistant's MQTT sensor resets to unknown on the payload "None".
             await client.publish(state_topic(serial, "next_meal"), next_ts or "None", retain=True)
+
+        if "surplusGrain" in state:
+            val = "OFF" if state["surplusGrain"] else "ON"
+            await client.publish(state_topic(serial, "food_low"), val, retain=True)
 
         last_desiccant = cfg.get("last_desiccant_ts")
         if last_desiccant:

@@ -2,6 +2,9 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
+## 2026.10.5
+- New Home Assistant binary sensor **Food Low** for the One RFID and Granary feeders (on when the feeder's own food sensor reports the hopper empty or low). Before, the food level only showed in the add-on, not in Home Assistant
+
 ## 2026.10.4
 - Works with the EMQX broker add-on as well as Mosquitto: the add-on finds which one is installed. Auto Setup stops that broker for the capture, and with EMQX the device logins go into EMQX's built-in user database through its REST API (new Settings fields EMQX API key and secret key, created in the EMQX dashboard under System → API Keys); EMQX applies them without a restart, so devices are not rebooted. Without an API key, or without EMQX's built-in database, the add-on logs that the login has to be created in EMQX by hand. Before, with EMQX, Auto Setup aborted ("App is not installed") and no device login was saved
 - If Mosquitto and EMQX both run, the add-on no longer guesses: set the one in use under Settings → MQTT → Broker add-on. Logins it created are tracked per broker, so switching brokers never touches accounts it did not create
