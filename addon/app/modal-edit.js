@@ -186,29 +186,12 @@ const DEVICE_TYPE_MAP = {
   // AF05: Polar Wet Food Feeder, wire model PLAF109 (capture 2026-10-11)
   "AF05": { device_type: "polar",                model: "AF05" },
 };
-const DEVICE_MQTT_MODELS = {
-  "dockstream2":          "plwf106",
-  "dockstream2_cordless": "plwf116",
-  "dockstream_rfid":      "plwf305",
-  "one_rfid":             "plaf301",
-  "granary":              "plaf103",
-};
-const DEVICE_VARIANTS = {
-  "dockstream2":          [{ value: "b", label: "Black" }, { value: "w", label: "White" }],
-  "dockstream2_cordless": [{ value: "b", label: "Black" }, { value: "w", label: "White" }],
-  // Only white confirmed so far, not certain there is a black variant. Add
-  // a black option back here if one turns up.
-  "dockstream_rfid":      [{ value: "w", label: "White" }],
-  "one_rfid":             [{ value: "b", label: "Black" }, { value: "w", label: "White" }],
-  // Danny's own unit (issue #8) is white; black is a real retail color too
-  // (Petlibro sells almost all their devices in both black and white).
-  "granary":              [{ value: "b", label: "Black" }, { value: "w", label: "White" }],
-};
-
+// No bundled product photos (they are Petlibro's): a device shows its icon
+// until you upload a photo under Edit. The colour choice only picked a photo,
+// so no variants are offered (populateVariantSelect hides the row).
+const DEVICE_VARIANTS = {};
 function deviceImageUrl(deviceType, variant) {
-  const model = DEVICE_MQTT_MODELS[deviceType];
-  if (!model || !variant) return "";
-  return `${BASE}/images/${model}_${variant}`;
+  return "";
 }
 
 function populatePetSection(sectionId, listId, optionalLabelId, deviceType) {

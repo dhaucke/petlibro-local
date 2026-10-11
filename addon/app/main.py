@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2026.10.8"
+VERSION = "2026.10.9"
 
 # Credential capture state
 _capture_state: dict = {"status": "idle", "result": {}}
@@ -908,6 +908,8 @@ async def on_startup(app):
         settings["mqtt_user"],
         settings["mqtt_pass"],
     )
+    if storage.drop_bundled_device_images():
+        _LOGGER.info("Removed links to the product photos earlier versions shipped")
     for serial, cfg in storage.get_devices().items():
         model = cfg.get("model", "")
         device_type = cfg.get("device_type", "")

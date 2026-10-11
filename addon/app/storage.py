@@ -169,6 +169,22 @@ def save_settings(updates: dict) -> dict:
     return current
 
 
+def drop_bundled_device_images() -> int:
+    """Clear image_url values that point at the Petlibro product photos earlier
+    versions shipped (e.g. .../images/plaf103_w); those files are gone, the
+    card shows the device icon instead. Uploaded photos (custom_*) are kept."""
+    import re
+    data = _load()
+    changed = 0
+    for cfg in data.get("devices", {}).values():
+        if re.search(r"/images/pl[a-z]{2}\d{3}_[a-z]$", cfg.get("image_url") or ""):
+            cfg["image_url"] = ""
+            changed += 1
+    if changed:
+        _save(data)
+    return changed
+
+
 def get_managed_logins() -> set:
     """Mosquitto usernames this add-on created itself and may change or remove."""
     # Deliberately not inferred from saved devices: Add Device saves the device

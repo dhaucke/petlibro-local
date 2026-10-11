@@ -2,6 +2,9 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
+## 2026.10.9
+- Removed the bundled device photos: they were Petlibro's own product images. A device now shows its icon until you upload your own photo under Edit → Custom Image. Links to the old photos are cleared on start, uploaded photos are kept. The colour choice is gone too, it only picked one of those photos
+
 ## 2026.10.8
 - Polar Wet Food Feeder: **Sound Mode** (Normal or Intelligent) and **Sound Interval** in the add-on and in Home Assistant, like the Petlibro app's "Device Sound → Mode": Intelligent repeats the tone at the interval for up to 10 minutes and stops once the pet starts eating
 

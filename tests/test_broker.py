@@ -49,3 +49,12 @@ def test_emqx_login_handling(tmp_path, monkeypatch):
         assert "a0d7b954_emqx:dev-a" not in storage.get_managed_logins()
 
     asyncio.run(run())
+
+
+def test_links_to_removed_product_photos_are_cleared(tmp_path, monkeypatch):
+    monkeypatch.setattr(storage, "DATA_FILE", str(tmp_path / "data.json"))
+    storage.save_device("AF01TEST", {"image_url": "/api/hassio_ingress/x/images/plaf103_w"})
+    storage.save_device("WF01TEST", {"image_url": "/api/hassio_ingress/x/images/custom_WF01TEST"})
+    assert storage.drop_bundled_device_images() == 1
+    assert storage.get_devices()["AF01TEST"]["image_url"] == ""
+    assert storage.get_devices()["WF01TEST"]["image_url"].endswith("custom_WF01TEST")
