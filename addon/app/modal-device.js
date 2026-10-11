@@ -6,7 +6,7 @@ function openDeviceModal(device) {
   const imgEl = document.getElementById("detail-img");
   const imgSrc = device.image_url || deviceImageUrl(device.device_type, device.variant);
   imgEl.innerHTML = imgSrc
-    ? `<img src="${escHtml(imgSrc)}" alt="">`
+    ? `<img src="${escHtml(imgSrc)}" alt=""${device.image_url ? "" : ' class="builtin"'}>`
     : `<span>${deviceIcon(device)}</span>`;
 
   document.getElementById("detail-name").textContent = device.name || device.device_type || device.serial;

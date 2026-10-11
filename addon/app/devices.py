@@ -1641,6 +1641,8 @@ def _format_local_time(ts_ms: int) -> str:
             dt = dt.astimezone()
     else:
         dt = dt.astimezone()
+    if _storage.get_settings().get("language") == "de":
+        return dt.strftime("%H:%M:%S")
     return dt.strftime("%I:%M:%S %p").lstrip("0")
 
 

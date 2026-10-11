@@ -170,6 +170,7 @@ function fmtDate(ts) {
 function fmtTime12(hhmm) {
   if (!hhmm) return "--";
   const [h, m] = hhmm.split(":").map(Number);
+  if (t("time.clock") === "24") return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   const ampm = h < 12 ? t("time.am") : t("time.pm");
   const h12 = h % 12 || 12;
   return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
@@ -253,6 +254,7 @@ function housingDaysRemaining(d) {
   return Math.round((ts + interval * 86400000 - Date.now()) / 86400000);
 }
 function _fmt12h(h, m) {
+  if (t("time.clock") === "24") return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   const ampm = h >= 12 ? t("time.pm") : t("time.am");
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
 }

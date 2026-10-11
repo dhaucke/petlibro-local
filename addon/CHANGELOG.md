@@ -2,6 +2,10 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
+## 2026.10.11
+- Bundled device pictures are shown whole with some room around them instead of filling (and cutting off) the card; your own photos still fill it
+- German interface and notifications use the 24-hour clock
+
 ## 2026.10.10
 - Device pictures are back, in black and white for every device type (Dockstream RFID: white only), including the new Polar Wet Food Feeder, and the colour choice under Add Device and Edit picks the picture again. They are only shown while a device has no photo of its own; an uploaded photo under Edit always takes precedence
 

@@ -562,5 +562,6 @@
   "polar.sound_normal": "Normal",
   "polar.sound_smart": "Intelligent",
   "polar.sound_interval": "Intervall (Min.)",
-  "polar.sound_hint": "Intelligent wiederholt den Ton in diesem Abstand bis zu 10 Minuten lang und stoppt, sobald dein Haustier frisst."
+  "polar.sound_hint": "Intelligent wiederholt den Ton in diesem Abstand bis zu 10 Minuten lang und stoppt, sobald dein Haustier frisst.",
+  "time.clock": "24"
 }

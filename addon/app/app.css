@@ -217,6 +217,8 @@
     overflow: hidden;
   }
   .card-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+  /* Bundled product pictures: whole device with some room around it (own photos keep cover) */
+  .card-img-wrap img.builtin, .detail-img img.builtin { object-fit: contain; padding: 10%; box-sizing: border-box; }
   .card-img-placeholder { font-size: 48px; opacity: .5; }
   .card-status {
     position: absolute;

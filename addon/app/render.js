@@ -70,7 +70,7 @@ function renderDevices() {
     const icon = deviceIcon(d);
     const imgSrc = d.image_url || deviceImageUrl(d.device_type, d.variant);
     const imgHtml = imgSrc
-      ? `<img src="${escHtml(imgSrc)}" alt="">`
+      ? `<img src="${escHtml(imgSrc)}" alt=""${d.image_url ? "" : ' class="builtin"'}>`
       : `<div class="card-img-placeholder">${icon}</div>`;
     const allPets = d.pets || [];
     const maxPetSlots = 5;

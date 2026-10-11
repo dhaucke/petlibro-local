@@ -562,5 +562,6 @@
   "polar.sound_normal": "Normal",
   "polar.sound_smart": "Intelligent",
   "polar.sound_interval": "Interval (min)",
-  "polar.sound_hint": "Intelligent repeats the tone at this interval for up to 10 minutes and stops once your pet starts eating."
+  "polar.sound_hint": "Intelligent repeats the tone at this interval for up to 10 minutes and stops once your pet starts eating.",
+  "time.clock": "12"
 }
