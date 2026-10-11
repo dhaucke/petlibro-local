@@ -278,6 +278,20 @@ function buildOverviewTab(device) {
         <button class="toggle-switch ${device.soundSwitch ? "sw-on" : "sw-off"}" id="ctrl-polar-sound"></button>
       </div>
     </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <div class="form-row" style="flex:1">
+        <label class="form-label">${t("polar.sound_mode")}</label>
+        <select class="form-select" id="polar-ringer-mode">
+          <option value="NORMAL"${device.ringerMode === "SMART" ? "" : " selected"}>${t("polar.sound_normal")}</option>
+          <option value="SMART"${device.ringerMode === "SMART" ? " selected" : ""}>${t("polar.sound_smart")}</option>
+        </select>
+      </div>
+      <div class="form-row" style="width:110px">
+        <label class="form-label">${t("polar.sound_interval")}</label>
+        <input class="form-input" id="polar-ringer-interval" type="number" min="1" max="10" value="${device.ringerInterval ?? 2}">
+      </div>
+    </div>
+    <p class="form-hint">${t("polar.sound_hint")}</p>
     <p class="form-hint">${t("polar.plans_hint")}</p>`;
   }
 
@@ -1497,6 +1511,17 @@ function wireDeviceTabHandlers(tabName) {
       const on = !polarSound.classList.contains("sw-on");
       polarSend(polarSound, { _sound: on }, { soundSwitch: on });
     };
+    const ringerMode = document.getElementById("polar-ringer-mode");
+    const ringerInterval = document.getElementById("polar-ringer-interval");
+    const sendRinger = async () => {
+      const body = { _ringer_mode: ringerMode.value, _ringer_interval: parseInt(ringerInterval.value) || 2 };
+      try {
+        await api("POST", `/api/devices/${d.serial}/command`, body);
+        _patchDevice(d.serial, { ringerMode: body._ringer_mode, ringerInterval: body._ringer_interval });
+      } catch(e) { alert(t("overview.cmd_failed", {error: e.message})); }
+    };
+    if (ringerMode) ringerMode.onchange = sendRinger;
+    if (ringerInterval) ringerInterval.onchange = _debounce(sendRinger, 1500);
     granaryToggle("ctrl-granary-lock", "disableHardwareButton");
     const granaryVolume = document.getElementById("feeder-granary-volume");
     if (granaryVolume) {

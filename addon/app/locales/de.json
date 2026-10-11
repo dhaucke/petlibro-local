@@ -557,5 +557,10 @@
   "polar.idle": "Bereit",
   "polar.stop": "Füttern stoppen",
   "polar.feed_hint": "„Jetzt füttern“ öffnet den Deckel über dem vorderen Teller. Wähl vorher den Teller; „Füttern stoppen“ schließt den Deckel vorzeitig.",
-  "polar.plans_hint": "Fütterungspläne für diesen Futterautomaten legst du in der Petlibro-App an (Cloud-Relay eingeschaltet lassen)."
+  "polar.plans_hint": "Fütterungspläne für diesen Futterautomaten legst du in der Petlibro-App an (Cloud-Relay eingeschaltet lassen).",
+  "polar.sound_mode": "Tonmodus",
+  "polar.sound_normal": "Normal",
+  "polar.sound_smart": "Intelligent",
+  "polar.sound_interval": "Intervall (Min.)",
+  "polar.sound_hint": "Intelligent wiederholt den Ton in diesem Abstand bis zu 10 Minuten lang und stoppt, sobald dein Haustier frisst."
 }

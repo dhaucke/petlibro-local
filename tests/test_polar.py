@@ -49,6 +49,9 @@ def test_polar_commands_match_the_app(tmp_path, monkeypatch):
         assert sent[-1] == {"lightSwitch": False, "lightAgingType": 1}
         assert await devices.polar_command("AF05TEST", {"_sound": True})
         assert sent[-1] == {"soundSwitch": True, "soundAgingType": 1}
+        assert await devices.polar_command("AF05TEST", {"_ringer_mode": "SMART", "_ringer_interval": 2})
+        assert sent[-1] == {"ringerMode": "SMART", "ringerInterval": 2, "ringerDuration": 10}
+        assert await devices.polar_command("AF05TEST", {"_ringer_mode": "LOUD"}) is False
         # Not a Polar command, other code handles it
         assert await devices.polar_command("AF05TEST", {"volume": 3}) is None
 
@@ -76,6 +79,8 @@ def test_polar_home_assistant_entities(tmp_path, monkeypatch):
     assert ha_mqtt.parse_command("petlibro_local/AF05TEST/light/set", "ON", "polar") == {"_light": True}
     assert ha_mqtt.parse_command("petlibro_local/AF05TEST/stop_feeding/set", "PRESS", "polar") == {"_stop_feeding": True}
     assert ha_mqtt.parse_command("petlibro_local/AF05TEST/feed_now/set", "PRESS", "polar") == {"_feed_now": True}
+    assert ha_mqtt.parse_command("petlibro_local/AF05TEST/sound_mode/set", "Intelligent", "polar") == {"_ringer_mode": "SMART"}
+    assert ha_mqtt.parse_command("petlibro_local/AF05TEST/sound_interval/set", "3.0", "polar") == {"_ringer_interval": 3}
     client = _Client()
     asyncio.run(ha_mqtt.publish_state(client, "AF05TEST", cfg,
                                       {"temperature": 20.58, "platePosition": 3, "feeding": True, "lightSwitch": True}))

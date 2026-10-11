@@ -557,5 +557,10 @@
   "polar.idle": "Idle",
   "polar.stop": "Stop feeding",
   "polar.feed_hint": "Feed now opens the lid over the plate in front. Pick the plate first; Stop feeding closes the lid early.",
-  "polar.plans_hint": "Feeding plans for this feeder are made in the Petlibro app (keep the Cloud relay on)."
+  "polar.plans_hint": "Feeding plans for this feeder are made in the Petlibro app (keep the Cloud relay on).",
+  "polar.sound_mode": "Sound mode",
+  "polar.sound_normal": "Normal",
+  "polar.sound_smart": "Intelligent",
+  "polar.sound_interval": "Interval (min)",
+  "polar.sound_hint": "Intelligent repeats the tone at this interval for up to 10 minutes and stops once your pet starts eating."
 }

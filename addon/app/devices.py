@@ -2510,6 +2510,16 @@ async def polar_command(serial: str, cmd: dict) -> bool | None:
     if "_sound" in cmd:
         return await send_command(serial, {"soundSwitch": bool(cmd["_sound"]),
                                            "soundAgingType": state.get("soundAgingType", 1)})
+    if "_ringer_mode" in cmd or "_ringer_interval" in cmd:
+        mode = cmd.get("_ringer_mode", state.get("ringerMode", "NORMAL"))
+        try:
+            interval = int(cmd.get("_ringer_interval", state.get("ringerInterval", 2)))
+        except (TypeError, ValueError):
+            return False
+        if mode not in _polar.RINGER_MODES or not 1 <= interval <= _polar.RINGER_INTERVAL_MAX:
+            return False
+        return await send_command(serial, {"ringerMode": mode, "ringerInterval": interval,
+                                           "ringerDuration": state.get("ringerDuration", 10)})
     return None
 
 

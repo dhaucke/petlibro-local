@@ -497,6 +497,25 @@ def _entity_configs(serial: str, cfg: dict, state: dict, extra_icon_names: list[
             "payload_off":   "OFF",
             "icon":          "mdi:volume-high",
         })))
+        entities.append(("select", "sound_mode", _e(serial, "sound_mode", b, {
+            "name":            "Sound Mode",
+            "state_topic":     state_topic(serial, "sound_mode"),
+            "command_topic":   cmd_topic(serial, "sound_mode"),
+            "options":         ["Normal", "Intelligent"],
+            "icon":            "mdi:bell-ring-outline",
+            "entity_category": "config",
+        })))
+        entities.append(("number", "sound_interval", _e(serial, "sound_interval", b, {
+            "name":                "Sound Interval",
+            "state_topic":         state_topic(serial, "sound_interval"),
+            "command_topic":       cmd_topic(serial, "sound_interval"),
+            "min":                 1,
+            "max":                 10,
+            "step":                1,
+            "unit_of_measurement": "min",
+            "icon":                "mdi:timer-outline",
+            "entity_category":     "config",
+        })))
 
     return entities
 
@@ -561,7 +580,7 @@ def get_command_topics(serial: str, device_type: str) -> list[str]:
         topics.append(cmd_topic(serial, "light"))
         topics.append(cmd_topic(serial, "buttons_lock"))
     elif device_type == "polar":
-        for key in ("feed_now", "stop_feeding", "plate", "light", "sound"):
+        for key in ("feed_now", "stop_feeding", "plate", "light", "sound", "sound_mode", "sound_interval"):
             topics.append(cmd_topic(serial, key))
     return topics
 
@@ -795,6 +814,11 @@ async def _publish_polar_state(client, serial: str, cfg: dict, state: dict):
         await client.publish(state_topic(serial, "light"), "ON" if state["lightSwitch"] else "OFF", retain=True)
     if "soundSwitch" in state:
         await client.publish(state_topic(serial, "sound"), "ON" if state["soundSwitch"] else "OFF", retain=True)
+    if state.get("ringerMode") in ("NORMAL", "SMART"):
+        await client.publish(state_topic(serial, "sound_mode"),
+                             "Intelligent" if state["ringerMode"] == "SMART" else "Normal", retain=True)
+    if state.get("ringerInterval") is not None:
+        await client.publish(state_topic(serial, "sound_interval"), str(state["ringerInterval"]), retain=True)
     last_fed = cfg.get("last_fed_ts")
     if last_fed:
         dt = datetime.datetime.fromtimestamp(int(last_fed), tz=datetime.timezone.utc)
@@ -823,6 +847,14 @@ def parse_command(topic: str, payload: str, device_type: str = "") -> dict | Non
             return {"_stop_feeding": True}
         if key == "sound":
             return {"_sound": payload == "ON"}
+        if key == "sound_mode":
+            mode = {"Normal": "NORMAL", "Intelligent": "SMART"}.get(payload)
+            return {"_ringer_mode": mode} if mode else None
+        if key == "sound_interval":
+            try:
+                return {"_ringer_interval": int(float(payload))}
+            except (TypeError, ValueError):
+                return None
     if key == "light":
         if device_type == "one_rfid":
             return {"screenDisplaySwitch": payload == "ON"}

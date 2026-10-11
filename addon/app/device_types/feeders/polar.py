@@ -15,8 +15,12 @@ Built from a real mqtt_proxy.py capture against the Petlibro cloud
 - Progress: WET_GRAIN_OUTPUT_EVENT with execStep GRAIN_THAW, GRAIN_START,
   OPEN_DOOR, CLOSE_DOOR, GRAIN_END (finished true); the cloud acks each step.
 - HEARTBEAT carries temperature (degrees C).
-Plans are edited in the Petlibro app (through the Cloud relay). Not built: ringerMode (NORMAL/SMART seen, meaning
-unknown), volume, cleaning reset (not in either capture).
+- Sound mode (app "Geräteton -> Modus"): ATTR_SET_SERVICE with ringerMode NORMAL
+  (one tone) or SMART ("Intelligent": the tone repeats every ringerInterval
+  minutes for ringerDuration minutes and stops once the pet eats), sent with
+  ringerInterval 2 and ringerDuration 10 in the capture.
+Plans are edited in the Petlibro app (through the Cloud relay). Not built:
+volume, cleaning reset (not in either capture).
 """
 
 DEVICE_TYPES = ["polar"]
@@ -40,3 +44,7 @@ def compute_alerts(state: dict, cfg: dict, online: bool) -> set:
 
 def track_intake(old_state: dict, new_state: dict, min_grams: float = 5) -> float | None:
     return None
+
+RINGER_MODES = ("NORMAL", "SMART")
+# ponytail: the app's interval picker showed 1-3 minutes; the real upper limit is unknown
+RINGER_INTERVAL_MAX = 10
