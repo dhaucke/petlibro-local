@@ -82,7 +82,7 @@ function renderDeviceTab(tabName) {
   else if (tabName === "led") content.innerHTML = buildLedTab(_currentDevice);
   else if (tabName === "maintenance") content.innerHTML = buildMaintenanceTab(_currentDevice);
   else if (tabName === "log") {
-    content.innerHTML = `<p style="color:var(--pl-subtext);padding:16px 0;text-align:center">Loading...</p>`;
+    content.innerHTML = `<p style="color:var(--pl-subtext);padding:16px 0;text-align:center">${t("device_modal.loading")}</p>`;
     if (_currentDevice.device_type === "one_rfid" || _currentDevice.device_type === "granary") {
       api("GET", `/api/devices/${_currentDevice.serial}/feeder-log`)
         .then(log => { content.innerHTML = buildFeederLogTab(_currentDevice, log); })
@@ -99,7 +99,7 @@ function renderDeviceTab(tabName) {
     return;
   }
   else if (tabName === "schedule") {
-    content.innerHTML = `<p style="color:var(--pl-subtext);padding:16px 0;text-align:center">Loading...</p>`;
+    content.innerHTML = `<p style="color:var(--pl-subtext);padding:16px 0;text-align:center">${t("device_modal.loading")}</p>`;
     api("GET", `/api/devices/${_currentDevice.serial}/feeding-plans`)
       .then(plans => {
         _schedPlans = plans;
@@ -412,7 +412,7 @@ function buildLedTab(device) {
         <label class="form-label">${t("overview.scrolling_text")}</label>
         <div style="display:flex;gap:8px">
           <input class="form-input" id="feeder-display-text" type="text" maxlength="20" placeholder="e.g. MOCHI" value="${escHtml(device.display_text || "")}" oninput="this.value=this.value.toUpperCase()">
-          <button class="btn-secondary" id="btn-send-display-text" style="flex-shrink:0">Send</button>
+          <button class="btn-secondary" id="btn-send-display-text" style="flex-shrink:0">${t("anim.send")}</button>
         </div>
         <p class="form-hint">${t("overview.display_text_hint")}</p>
       </div>
@@ -1453,15 +1453,15 @@ function wireDeviceTabHandlers(tabName) {
         const text = (document.getElementById("feeder-display-text").value || "").trim().toUpperCase();
         if (!text) return;
         const orig = sendDisplayText.textContent;
-        sendDisplayText.textContent = "Sending...";
+        sendDisplayText.textContent = t("overview.sending");
         sendDisplayText.disabled = true;
         try {
           await api("POST", `/api/devices/${d.serial}/command`, { _display_text: text });
           _patchDevice(d.serial, { display_text: text, display_icon: 0, display_icon_name: null });
           renderDevices();
-          sendDisplayText.textContent = "Sent!";
+          sendDisplayText.textContent = t("overview.sent");
         } catch(e) {
-          sendDisplayText.textContent = "Failed";
+          sendDisplayText.textContent = t("overview.failed");
         }
         setTimeout(() => { sendDisplayText.textContent = orig; sendDisplayText.disabled = false; }, 2000);
       };

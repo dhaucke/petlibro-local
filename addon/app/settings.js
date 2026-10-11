@@ -258,6 +258,7 @@ function renderSettings() {
   document.getElementById("s-mqtt-port").value = _settings.mqtt_port || 1883;
   document.getElementById("s-mqtt-user").value = _settings.mqtt_user || "";
   document.getElementById("s-mqtt-pass").value = _settings.mqtt_pass || "";
+  document.getElementById("s-cloud-mqtt-host").value = _settings.cloud_mqtt_host || "";
   const unitsSel = document.getElementById("s-units");
   if (unitsSel) {
     for (const opt of unitsSel.options) {
@@ -296,6 +297,7 @@ async function saveSettings(fromTab) {
     mqtt_port: parseInt(document.getElementById("s-mqtt-port").value) || 1883,
     mqtt_user: document.getElementById("s-mqtt-user").value.trim(),
     mqtt_pass: document.getElementById("s-mqtt-pass").value,
+    cloud_mqtt_host: document.getElementById("s-cloud-mqtt-host").value.trim() || "mqtt.us.petlibro.com",
     language: document.getElementById("s-language").value,
     units: document.getElementById("s-units").value,
     feeder_timezone: document.getElementById("s-feeder-tz")?.value || "America/Denver",

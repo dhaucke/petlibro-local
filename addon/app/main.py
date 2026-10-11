@@ -11,6 +11,7 @@ import uuid
 from aiohttp import web
 
 import devices
+import relay
 import ha_api
 import mosquitto
 import mqtt_broker
@@ -51,7 +52,8 @@ def _devices_with_state() -> list:
             ]
         intake_today = storage.get_intake_today(serial)
         feeding_plans = storage.get_device_feeding_plans(serial)
-        result.append({**cfg, **state, "pets": device_pets, "intake_today_grams": intake_today, "feeding_plans": feeding_plans})
+        result.append({**cfg, **state, "pets": device_pets, "intake_today_grams": intake_today, "feeding_plans": feeding_plans,
+                       "relay_status": relay.status(serial)})
     return result
 
 
@@ -256,6 +258,8 @@ async def handle_api_device_post(request):
         device_type = device.get("device_type", "")
         if model:
             devices.register_device(serial, model, device_type)
+        if not device.get("cloud_relay"):
+            relay.stop(serial, hand_back=True)
         if device_type == "one_rfid" and ("display_text" in data or "display_icon" in data):
             asyncio.ensure_future(devices.send_display(
                 serial,

@@ -74,6 +74,8 @@ async function pollAutoCapture() {
       const capturedPass = s.result.password || "";
       document.getElementById("a-serial").dataset.mqttUser = capturedUser;
       document.getElementById("a-serial").dataset.mqttPass = capturedPass;
+      document.getElementById("a-serial").dataset.clientId = s.result.client_id || "";
+      document.getElementById("a-cloud-relay").checked = true;
       document.getElementById("a-cred-user").value = capturedUser;
       document.getElementById("a-cred-pass").value = capturedPass;
       const capturedSerial = detected.serial || s.result.client_id || "";
@@ -108,6 +110,8 @@ async function finishAutoDevice() {
     model: modelOpt.dataset.model || "",
     mqtt_user: serialEl.dataset.mqttUser || "",
     mqtt_pass: serialEl.dataset.mqttPass || "",
+    mqtt_client_id: serialEl.dataset.clientId || "",
+    cloud_relay: document.getElementById("a-cloud-relay").checked,
     name: document.getElementById("a-name").value.trim() || t("add_device.default_name"),
     room: document.getElementById("a-room").value.trim(),
     variant: aVariant,

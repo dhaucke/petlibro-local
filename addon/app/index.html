@@ -200,6 +200,11 @@
             <button class="btn-eye" type="button" data-target="s-mqtt-pass" title="Show/hide password">👁</button>
           </div>
         </div>
+        <div class="form-row">
+          <label class="form-label" data-i18n="settings.cloud_mqtt_host">Cloud MQTT host (relay)</label>
+          <input class="form-input" id="s-cloud-mqtt-host" type="text" placeholder="mqtt.us.petlibro.com">
+          <p class="form-hint" data-i18n="settings.cloud_mqtt_host_hint">Petlibro broker the cloud relay connects to. Must resolve to its public address, not to Home Assistant.</p>
+        </div>
         <p class="form-hint" data-i18n="settings.mqtt_hint">The add-on connects to this broker to receive device data. Create a dedicated broker user in Mosquitto for the add-on.</p>
       </div>
       <button class="btn-primary" id="btn-save-mqtt">
@@ -337,6 +342,14 @@
     </div>
 
     <div class="form-row">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
+        <input type="checkbox" id="e-cloud-relay" style="width:16px;height:16px;accent-color:var(--pl-accent)">
+        <span data-i18n="relay.label">Cloud relay (keep the Petlibro app working)</span>
+      </label>
+      <p class="form-hint" data-i18n="relay.hint">Passes the device's messages on to the Petlibro cloud with its own login, so the official app keeps working. While the cloud is reachable it answers the device (time, schedules); manage feeding schedules in the Petlibro app then. Without internet this add-on takes over again.</p>
+      <p class="form-hint" id="e-relay-status" style="display:none"></p>
+    </div>
+    <div class="form-row">
       <label class="form-label" data-i18n="edit_device.credentials">Device Serial &amp; MQTT Credentials</label>
       <div style="margin-bottom:6px">
         <div class="pw-wrap">
@@ -417,7 +430,7 @@
       <div id="auto-step-2" style="display:none">
         <div class="capture-success" data-i18n="add_device.captured">✓ Credentials captured!</div>
         <div id="a-login-warn" style="display:none;color:var(--pl-danger);font-size:12px;margin-bottom:8px" data-i18n="add_device.cred_warn">⚠ Could not save credentials to Mosquitto automatically. You may need to add them manually in the Mosquitto broker settings after adding this device.</div>
-        <div id="a-type-warn" style="display:none;color:var(--pl-danger);font-size:12px;margin-bottom:8px" data-i18n="add_device.type_warn">⚠ This serial number wasn't recognized as a supported device. Please select the correct device type manually below, if it's not in the list, this device isn't supported yet, please open a GitHub issue.</div>
+        <div id="a-type-warn" style="display:none;color:var(--pl-danger);font-size:12px;margin-bottom:8px" data-i18n="add_device.type_warn">⚠ This serial number wasn't recognized as a supported device. Please select the correct device type manually below. If it's not in the list, this device isn't supported yet.</div>
         <div class="form-row">
           <label class="form-label" data-i18n="add_device.serial">Serial Number</label>
           <div class="pw-wrap">
@@ -461,6 +474,14 @@
         <div class="form-row">
           <label class="form-label" data-i18n="add_device.room">Room / Location</label>
           <select class="form-select" id="a-room"></select>
+        </div>
+        <div class="form-row">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px">
+            <input type="checkbox" id="a-cloud-relay" style="width:16px;height:16px;accent-color:var(--pl-accent)">
+            <span data-i18n="relay.label">Cloud relay (keep the Petlibro app working)</span>
+          </label>
+          <p class="form-hint" data-i18n="relay.hint">Passes the device's messages on to the Petlibro cloud with its own login, so the official app keeps working. While the cloud is reachable it answers the device (time, schedules); manage feeding schedules in the Petlibro app then. Without internet this add-on takes over again.</p>
+          <p class="form-hint" id="a-relay-status" style="display:none"></p>
         </div>
         <div class="form-row" id="a-pet-section" style="display:none">
           <label class="form-label"><span data-i18n="add_device.pets">Assigned Pets</span> <span id="a-pet-optional" style="font-weight:400;color:var(--pl-subtext)">(optional)</span></label>
@@ -571,9 +592,9 @@
     </div>
     <input type="file" id="p-photo-file" accept="image/jpeg,image/png,image/webp" style="display:none">
     <div class="form-row" id="p-rfid-section">
-      <label class="form-label">RFID Tag</label>
+      <label class="form-label" data-i18n="pet.rfid_tag">RFID Tag</label>
       <div style="display:flex;gap:6px;align-items:center">
-        <input class="form-input" id="p-rfid-tag" type="password" autocomplete="off" placeholder="auto-detected" style="flex:1;font-family:monospace">
+        <input class="form-input" id="p-rfid-tag" type="password" autocomplete="off" placeholder="auto-detected" data-i18n-ph="pet.rfid_auto" style="flex:1;font-family:monospace">
         <button type="button" id="btn-rfid-eye" style="background:none;border:none;cursor:pointer;color:var(--pl-subtext);font-size:18px;padding:4px" title="Show/hide">👁</button>
       </div>
     </div>
@@ -582,36 +603,36 @@
       <div id="p-device-list" style="display:flex;flex-direction:column;gap:8px;margin-top:4px"></div>
     </div>
     <div class="form-row" style="margin-top:4px">
-      <label class="form-label">Activity Notifications</label>
+      <label class="form-label" data-i18n="pet.activity_notifications">Activity Notifications</label>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
           <input type="checkbox" id="p-notify-eating-activity" style="width:16px;height:16px;accent-color:var(--pl-accent)">
-          <span>Notify each time my pet eats</span>
+          <span data-i18n="pet.notify_each_meal">Notify each time my pet eats</span>
         </label>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
             <input type="checkbox" id="p-no-eat-enabled" style="width:16px;height:16px;accent-color:var(--pl-accent)">
-            <span>Alert if no eating session detected after</span>
+            <span data-i18n="pet.no_eat_alert">Alert if no eating session detected after</span>
           </label>
           <input type="number" id="p-no-eat-hours" class="form-input" min="1" max="72" value="12" style="width:70px">
-          <span style="font-size:14px">hours</span>
+          <span style="font-size:14px" data-i18n="pet.hours">hours</span>
         </div>
       </div>
     </div>
     <div class="form-row" style="margin-top:4px">
-      <label class="form-label">Notification Channels</label>
+      <label class="form-label" data-i18n="notif.channels">Notification Channels</label>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
           <input type="checkbox" id="p-notify-bell" style="width:16px;height:16px;accent-color:var(--pl-accent)">
-          <span>In-app bell</span>
+          <span data-i18n="pet.in_app_bell">In-app bell</span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
           <input type="checkbox" id="p-notify-email" style="width:16px;height:16px;accent-color:var(--pl-accent)">
-          <span>Email</span>
+          <span data-i18n="notif.email">Email</span>
         </label>
         <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
           <input type="checkbox" id="p-notify-mobile" style="width:16px;height:16px;accent-color:var(--pl-accent)">
-          <span>Mobile (Home Assistant Companion app)</span>
+          <span data-i18n="notif.mobile">Mobile (Home Assistant Companion app)</span>
         </label>
       </div>
     </div>
@@ -619,7 +640,7 @@
       <button class="btn-primary" id="btn-pet-save" style="width:auto;padding:8px 28px" data-i18n="pet.save">Save</button>
     </div>
     <div id="p-activity-section" style="display:none;margin-top:16px">
-      <div class="tab-section-heading" style="margin-bottom:8px">Recent Activity</div>
+      <div class="tab-section-heading" style="margin-bottom:8px" data-i18n="pet.recent_activity">Recent Activity</div>
       <div id="p-activity-log" style="font-size:13px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:6px"></div>
     </div>
   </div>
@@ -741,35 +762,35 @@
 <div class="modal-overlay" id="icon-editor-overlay">
   <div class="modal" style="max-width:680px;width:calc(100% - 32px)">
     <div class="modal-header">
-      <span class="modal-title">Icon Editor</span>
+      <span class="modal-title" data-i18n="icon_ed.title">Icon Editor</span>
       <button onclick="closeIconEditor()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--pl-subtext);line-height:1;padding:4px">&#x2715;</button>
     </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap">
 
       <!-- Saved icon list -->
       <div style="width:148px;flex-shrink:0">
-        <div style="font-size:12px;font-weight:600;color:var(--pl-subtext);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Saved Icons</div>
+        <div style="font-size:12px;font-weight:600;color:var(--pl-subtext);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px" data-i18n="icon_ed.saved">Saved Icons</div>
         <div id="ie-list"></div>
-        <p style="font-size:11px;color:var(--pl-subtext);margin-top:8px;line-height:1.4">Max 12 icons. Oldest removed when full.</p>
+        <p style="font-size:11px;color:var(--pl-subtext);margin-top:8px;line-height:1.4" data-i18n="icon_ed.max">Max 12 icons. Oldest removed when full.</p>
       </div>
 
       <!-- Editor area -->
       <div style="flex:1;min-width:220px">
-        <div style="font-size:12px;font-weight:600;color:var(--pl-subtext);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Draw (5 &times; 12)</div>
+        <div style="font-size:12px;font-weight:600;color:var(--pl-subtext);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px" data-i18n="icon_ed.draw">Draw (5 &times; 12)</div>
         <div id="ie-grid" style="user-select:none"></div>
 
         <div style="margin-top:12px">
-          <div style="font-size:12px;font-weight:600;color:var(--pl-subtext);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Display preview (26-wide)</div>
+          <div style="font-size:12px;font-weight:600;color:var(--pl-subtext);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px" data-i18n="icon_ed.preview">Display preview (26-wide)</div>
           <div id="ie-preview" style="background:var(--pl-surface-2,#1a1a2e);padding:8px;border-radius:6px;display:inline-block"></div>
         </div>
 
         <div style="margin-top:14px">
-          <input class="form-input" type="text" id="ie-name" placeholder="Icon name" maxlength="32" style="margin-bottom:10px">
+          <input class="form-input" type="text" id="ie-name" placeholder="Icon name" data-i18n-ph="icon_ed.name" maxlength="32" style="margin-bottom:10px">
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn-primary" id="ie-btn-send" style="flex:1">Send to Feeder</button>
-            <button class="btn-secondary" id="ie-btn-save" style="flex:1">Save</button>
-            <button class="btn-secondary" id="ie-btn-clear">Clear</button>
-            <button class="btn-secondary" id="ie-delete" style="color:var(--pl-danger)" disabled>Delete</button>
+            <button class="btn-primary" id="ie-btn-send" style="flex:1" data-i18n="animed.send">Send to Feeder</button>
+            <button class="btn-secondary" id="ie-btn-save" style="flex:1" data-i18n="settings.save">Save</button>
+            <button class="btn-secondary" id="ie-btn-clear" data-i18n="animed.clear">Clear</button>
+            <button class="btn-secondary" id="ie-delete" style="color:var(--pl-danger)" disabled data-i18n="animed.del">Delete</button>
           </div>
         </div>
       </div>

@@ -201,13 +201,13 @@ async function _saveIcon() {
     document.getElementById("ie-delete").disabled = false;
     _renderIconList();
   } catch (e) {
-    alert("Failed to save icon.");
+    alert(t("icon_ed.save_failed"));
   }
 }
 
 async function _deleteIcon() {
   if (_editorIconId === null) return;
-  if (!confirm("Delete this icon?")) return;
+  if (!confirm(t("icon_ed.delete_confirm"))) return;
   try {
     await api("DELETE", `/api/icons/${_editorIconId}`);
     _savedIcons = _savedIcons.filter(ic => ic.id !== _editorIconId);
@@ -217,7 +217,7 @@ async function _deleteIcon() {
     document.getElementById("ie-delete").disabled = true;
     _renderAll();
   } catch (e) {
-    alert("Failed to delete icon.");
+    alert(t("icon_ed.delete_failed"));
   }
 }
 
@@ -229,9 +229,9 @@ async function _sendToFeeder() {
     await api("POST", `/api/devices/${_editorSerial}/command`, { _display_frame: frame, _display_frame_name: name });
     _patchDevice(_editorSerial, { display_icon_name: name, display_icon: 0 });
     renderDevices();
-    showToast("Icon sent to feeder.");
+    showToast(t("icon_ed.sent"));
   } catch (e) {
-    alert("Failed to send icon to feeder.");
+    alert(t("icon_ed.send_failed"));
   }
 }
 

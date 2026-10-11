@@ -9,6 +9,10 @@ function openEditDevice() {
   document.getElementById("e-cred-serial").value = device.serial || "";
   document.getElementById("e-cred-user").value = device.mqtt_user || "";
   document.getElementById("e-cred-pass").value = device.mqtt_pass || "";
+  document.getElementById("e-cloud-relay").checked = !!device.cloud_relay;
+  const relayStatus = document.getElementById("e-relay-status");
+  relayStatus.style.display = device.cloud_relay ? "" : "none";
+  relayStatus.textContent = t(`relay.status_${device.relay_status || "off"}`);
   document.getElementById("e-cred-hint").style.display = "none";
   document.getElementById("e-cred-hint").textContent = "";
   ["e-cred-serial", "e-cred-user", "e-cred-pass"].forEach(id => {
@@ -29,7 +33,7 @@ function openEditDevice() {
         <input type="checkbox" class="e-pet-cb" value="${escHtml(p.id)}"
           ${assignedIds.has(p.id) ? "checked" : ""}
           style="width:16px;height:16px;accent-color:var(--pl-accent)">
-        <span>${escHtml(p.name || "Unnamed pet")}</span>
+        <span>${escHtml(p.name || t("pet.unnamed"))}</span>
       </label>
     `).join("");
   } else {
@@ -81,7 +85,8 @@ async function saveEditDevice() {
   const petIds = Array.from(document.querySelectorAll(".e-pet-cb:checked")).map(cb => cb.value);
 
   try {
-    const payload = { name: name || device.name, room, variant, image_url, pet_ids: petIds };
+    const payload = { name: name || device.name, room, variant, image_url, pet_ids: petIds,
+                      cloud_relay: document.getElementById("e-cloud-relay").checked };
     if (device.device_type === "one_rfid") {
       const minSecs = parseInt(document.getElementById("e-min-eating-secs").value);
       if (!isNaN(minSecs) && minSecs >= 10) payload.min_eating_secs = minSecs;
@@ -216,7 +221,7 @@ function populatePetSection(sectionId, listId, optionalLabelId, deviceType) {
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--pl-text)">
       <input type="checkbox" class="add-pet-cb" data-list="${escHtml(listId)}" value="${escHtml(p.id)}"
         style="width:16px;height:16px;accent-color:var(--pl-accent)">
-      <span>${escHtml(p.name || "Unnamed pet")}</span>
+      <span>${escHtml(p.name || t("pet.unnamed"))}</span>
     </label>
   `).join("");
 }
@@ -246,7 +251,7 @@ function populateVariantSelect(selectId, deviceType, currentVariant) {
   }
   sel.closest(".form-row").style.display = "";
   sel.innerHTML = variants.map(v =>
-    `<option value="${v.value}"${v.value === currentVariant ? " selected" : ""}>${v.label}</option>`
+    `<option value="${v.value}"${v.value === currentVariant ? " selected" : ""}>${t(`variant.${v.value}`)}</option>`
   ).join("");
 }
 

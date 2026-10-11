@@ -15,6 +15,8 @@ import os
 import aiomqtt
 import device_types as _device_types
 import ha_mqtt
+import relay
+from i18n import tr
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -157,6 +159,9 @@ _audio_urls: dict[str, str] = {}
 # msgId -> (serial, device_type) for NTP_SYNC messages awaiting the device's ack
 _ntp_sync_pending: dict[str, tuple] = {}
 _last_reconnect_push: dict[str, float] = {}
+# When this add-on last pushed feeding plans itself (see the FEEDING_PLAN_SERVICE ack)
+_local_plan_push: dict[str, tuple[float, list]] = {}  # serial -> (time of last push, recent msgIds)
+LOCAL_PLAN_ACK_WINDOW_SECS = 60
 # Missed-feed watchdog (see _check_missed_feeds). In-memory only on purpose:
 # it can only judge feeds it was watching, so it never looks back past the
 # add-on's own start or a device's last reconnect.
@@ -269,7 +274,7 @@ def _mark_online(serial: str):
                 # Feeders are left to _check_device_clock on the next heartbeat
                 # (about a minute away), which holds the correction if it would
                 # skip or repeat a meal. A blind push here could not tell.
-                if device_type not in ("one_rfid", "granary") and _last_seen[serial] - _last_reconnect_push.get(serial, 0.0) >= RECONNECT_PUSH_COOLDOWN_SECS:
+                if not relay.is_passive(serial) and device_type not in ("one_rfid", "granary") and _last_seen[serial] - _last_reconnect_push.get(serial, 0.0) >= RECONNECT_PUSH_COOLDOWN_SECS:
                     _last_reconnect_push[serial] = _last_seen[serial]
                     asyncio.ensure_future(_push_ntp_sync(serial, device_type))
 
@@ -281,11 +286,13 @@ def _mark_offline(serial: str):
     if was_online:
         _offline_since.setdefault(serial, _t.time())
     _online[serial] = False
+    relay.stop(serial)
     if was_online and _client_ref is not None:
         asyncio.ensure_future(ha_mqtt.publish_availability(_client_ref, serial, False))
 
 
 def unregister_device(serial: str):
+    relay.stop(serial)
     _devices.pop(serial, None)
     _state.pop(serial, None)
     _online.pop(serial, None)
@@ -591,6 +598,10 @@ async def send_feeding_plans(serial: str, plans: list) -> bool:
         "msgId":  f"{serial}_{int(time.time())}",
         "plans":  clean,
     })
+    msg_id = json.loads(payload)["msgId"]
+    # Recorded before publishing: the feeder's ack can arrive while publish() is awaited
+    recent_ids = (_local_plan_push.get(serial, (0.0, []))[1] + [msg_id])[-20:]
+    _local_plan_push[serial] = (time.time(), recent_ids)
     try:
         await _client_ref.publish(topic, payload)
         _LOGGER.info("FEEDING_PLAN_SERVICE sent to %s... topic=%s payload=%s", serial[:6], topic, payload)
@@ -667,7 +678,7 @@ async def _check_and_fire_alerts(serial: str):
                     _LOGGER.info("Alert throttled (fired <24h ago): %s for %s...", alert, serial[:6])
                     continue
                 _storage.save_alert_last_fired(serial, alert, time.time())
-            msg      = _ALERT_MESSAGES.get(alert, alert)
+            msg      = tr(_ALERT_MESSAGES.get(alert, alert))
             title    = f"Petlibro Local: {name} - {msg}"
             notif_id = f"petlibro_local_{serial[:8]}_{alert}"
             await _notifications.fire_notification(title, msg, settings, device_cfg,
@@ -677,7 +688,7 @@ async def _check_and_fire_alerts(serial: str):
             # Auto-dismiss the offline notification (HA bell + mobile clear) before firing back-online
             offline_id = f"petlibro_local_{serial[:8]}_offline"
             await _notifications.dismiss_notification(offline_id, settings, device_cfg)
-            msg   = "Device is back online."
+            msg   = tr("Device is back online.")
             title = f"Petlibro Local: {name} - {msg}"
             await _notifications.fire_notification(title, msg, settings, device_cfg)
             _LOGGER.info("Back-online notification fired for %s...", serial[:6])
@@ -693,10 +704,11 @@ async def _check_and_fire_alerts(serial: str):
                 duration_secs = max(0, int((now_ms - lost_ts) / 1000))
                 mins, secs = divmod(duration_secs, 60)
                 dur_str = f"{mins}m{secs}s" if mins else f"{secs}s"
-                msg = (f"Power lost at {_format_local_time(int(lost_ts))}, "
-                       f"restored at {_format_local_time(int(now_ms))} ({dur_str}).")
+                msg = tr("Power lost at {lost}, restored at {back} ({duration}).",
+                         lost=_format_local_time(int(lost_ts)), back=_format_local_time(int(now_ms)),
+                         duration=dur_str)
             else:
-                msg = "AC power restored."
+                msg = tr("AC power restored.")
             title = f"Petlibro Local: {name} - {msg}"
             await _notifications.fire_notification(title, msg, settings, device_cfg)
             _LOGGER.info("Power-restored notification fired for %s...: %s", serial[:6], msg)
@@ -1016,7 +1028,8 @@ def _handle_message(serial: str, topic_str: str, raw: str):
     if cmd == "NTP":
         _LOGGER.info("NTP request from %s...", serial[:6])
         _ntp_logger.info("REQUEST from %s... (%s)", serial[:6], _device_name(serial))
-        asyncio.ensure_future(_respond_ntp(topic_str, data.get("ts")))
+        if not relay.is_passive(serial):
+            asyncio.ensure_future(_respond_ntp(topic_str, data.get("ts")))
         _mark_online(serial)
         return
 
@@ -1028,7 +1041,8 @@ def _handle_message(serial: str, topic_str: str, raw: str):
 
     if cmd == "GET_FEEDING_PLAN_EVENT":
         _ntp_logger.info("FEEDING_PLAN REQUEST from %s... (%s)", serial[:6], _device_name(serial))
-        asyncio.ensure_future(_respond_feeding_plan(serial, topic_str))
+        if not relay.is_passive(serial):
+            asyncio.ensure_future(_respond_feeding_plan(serial, topic_str))
         return
 
     if cmd == "FEEDING_PLAN_SERVICE":
@@ -1038,6 +1052,18 @@ def _handle_message(serial: str, topic_str: str, raw: str):
         code = data.get("code")
         plans = data.get("plans", [])
         _LOGGER.info("FEEDING_PLAN_SERVICE ack from %s...: code=%s plans=%s", serial[:6], code, json.dumps(plans))
+        import time as _time
+        pushed_at, pushed_ids = _local_plan_push.get(serial, (0.0, []))
+        if data.get("msgId"):
+            own_push = data["msgId"] in pushed_ids
+        else:  # no msgId echoed: fall back to timing
+            own_push = _time.time() - pushed_at < LOCAL_PLAN_ACK_WINDOW_SECS
+        if relay.is_passive(serial) and code == 0 and isinstance(plans, list) and not own_push:
+            # With the relay the Petlibro app owns the schedule; keep our copy in
+            # step so Next Meal and the missed-feed check follow the app's plans.
+            # Acks of our own pushes (edits, pause) are skipped: those plans are
+            # already stored here, with our disabled entries that the wire lacks.
+            _adopt_cloud_plans(serial, plans)
         _mark_online(serial)
         asyncio.ensure_future(_check_and_fire_alerts(serial))
         return
@@ -1059,7 +1085,8 @@ def _handle_message(serial: str, topic_str: str, raw: str):
 
     if cmd == "GRAIN_OUTPUT_EVENT":
         # Feeder reports grain dispensing progress. Ack it, and track intake on completion.
-        asyncio.ensure_future(_ack_grain_output(serial, topic_str, data))
+        # Who answers is decided now, not in the task: the relay status can change before it runs
+        asyncio.ensure_future(_ack_grain_output(serial, topic_str, data, ack=not relay.is_passive(serial)))
         _mark_online(serial)
         asyncio.ensure_future(_check_and_fire_alerts(serial))
         return
@@ -1131,12 +1158,12 @@ def _handle_message(serial: str, topic_str: str, raw: str):
                                 pet_cfg = pets.get(pet_id, {})
                                 if pet_cfg.get("notify_eating_activity", True):
                                     import notifications as _notif
-                                    pet_name = pets.get(pet_id, {}).get("name") or "Your pet"
+                                    pet_name = pets.get(pet_id, {}).get("name") or tr("Your pet")
                                     dev_name = cfg.get("name") or serial[:8]
                                     mins = duration_secs // 60
                                     secs_r = duration_secs % 60
                                     dur_str = f"{mins}m{secs_r:02d}s" if mins else f"{secs_r}s"
-                                    msg = f"{pet_name} ate for {dur_str} at {dev_name}"
+                                    msg = tr("{pet} ate for {duration} at {device}", pet=pet_name, duration=dur_str, device=dev_name)
                                     title = f"Petlibro Local: {msg}"
                                     notify_cfg = {
                                         "notify_bell":   pet_cfg.get("notify_bell", True),
@@ -1283,7 +1310,8 @@ def _handle_message(serial: str, topic_str: str, raw: str):
             # otherwise it'd stay stuck on whatever discovery last published
             # at add-on startup even though the sensors themselves update fine.
             asyncio.ensure_future(republish_ha_discovery(serial))
-        asyncio.ensure_future(_ack_device_start(serial, topic_str, data))
+        if not relay.is_passive(serial):  # with the relay the cloud acks
+            asyncio.ensure_future(_publish_start_ack(serial, topic_str, data))
         _mark_online(serial)
         asyncio.ensure_future(_check_and_fire_alerts(serial))
         asyncio.ensure_future(_publish_ha_state(serial))
@@ -1393,12 +1421,10 @@ async def _respond_feeding_plan(serial: str, request_topic: str) -> None:
         pass
 
 
-async def _ack_grain_output(serial: str, event_topic: str, data: dict) -> None:
+async def _publish_grain_ack(event_topic: str, data: dict) -> None:
     import time as _time
-    global _client_ref
     if _client_ref is None:
         return
-    response_topic = event_topic.replace("/post", "/sub")
     ack = json.dumps({
         "cmd":      "GRAIN_OUTPUT_EVENT",
         "ts":       int(_time.time() * 1000),
@@ -1407,9 +1433,18 @@ async def _ack_grain_output(serial: str, event_topic: str, data: dict) -> None:
         "execStep": data.get("execStep", ""),
     })
     try:
-        await _client_ref.publish(response_topic, ack)
+        await _client_ref.publish(event_topic.replace("/post", "/sub"), ack)
     except Exception:
         pass
+
+
+async def _ack_grain_output(serial: str, event_topic: str, data: dict, ack: bool = True) -> None:
+    import time as _time
+    global _client_ref
+    if _client_ref is None:
+        return
+    if ack:  # False while the relay leaves the ack to the cloud
+        await _publish_grain_ack(event_topic, data)
     # Track food dispensed on completion
     if data.get("finished") and data.get("actualGrainNum", 0) > 0:
         try:
@@ -1429,9 +1464,11 @@ async def _ack_grain_output(serial: str, event_topic: str, data: dict) -> None:
             if device_cfg.get("notifications", {}).get("food_dispensed"):
                 import notifications as _notifications
                 name  = device_cfg.get("name") or serial[:8]
-                source_label = "Manual" if source == "manual" else "Scheduled"
-                msg   = f"Food dispensed - {source_label} - {portions} portion{'s' if portions != 1 else ''} at {name}"
-                title = f"Petlibro Local: {name} - Food dispensed"
+                source_label = tr("Manual") if source == "manual" else tr("Scheduled")
+                amount = tr("{n} portion" if portions == 1 else "{n} portions", n=portions)
+                msg   = tr("Food dispensed - {source} - {portions} at {device}",
+                           source=source_label, portions=amount, device=name)
+                title = f"Petlibro Local: {name} - {tr('Food dispensed')}"
                 notif_id = f"petlibro_local_{serial[:8]}_food_dispensed_{int(_time.time())}"
                 asyncio.ensure_future(
                     _notifications.fire_notification(title, msg, _storage.get_settings(), device_cfg,
@@ -1624,9 +1661,9 @@ async def _handle_fountain_drink(serial: str, data: dict) -> None:
         if pet_id and tag:
             try:
                 import notifications as _notif
-                pet_name = pets.get(pet_id, {}).get("name") or "Your pet"
+                pet_name = pets.get(pet_id, {}).get("name") or tr("Your pet")
                 dev_name = cfg.get("name") or serial[:8]
-                msg = f"{pet_name} drank {round(grams)}mL at {dev_name}"
+                msg = tr("{pet} drank {ml}mL at {device}", pet=pet_name, ml=round(grams), device=dev_name)
                 title = f"Petlibro Local: {msg}"
                 pet_cfg = pets.get(pet_id, {})
                 notify_cfg = {
@@ -1643,7 +1680,7 @@ async def _handle_fountain_drink(serial: str, data: dict) -> None:
         _LOGGER.exception("WEIGHT_CHANGE_EVENT handling error for %s...", serial[:6])
 
 
-async def _ack_device_start(serial: str, event_topic: str, data: dict) -> None:
+async def _publish_start_ack(serial: str, event_topic: str, data: dict) -> None:
     import time as _time
     global _client_ref
     if _client_ref is None:
@@ -2005,11 +2042,11 @@ async def _notify_skipped_feeds(serial: str, offset: int, meals: list) -> None:
         return
     name = cfg.get("name") or serial[:8]
     when = ", ".join(_fmt_feed_time(x) for x in meals)
-    msg = (f"{name}'s clock was {offset // 60} min slow and has now been corrected. "
-           f"The {when} scheduled feed was skipped by the correction. "
-           f"No food was added to make up for it, feed manually if you want to.")
+    msg = tr("{device}'s clock was {minutes} min slow and has now been corrected. The {when} scheduled feed "
+             "was skipped by the correction. No food was added to make up for it, feed manually if you want to.",
+             device=name, minutes=offset // 60, when=when)
     await _notifications.fire_notification(
-        f"Petlibro Local: {name} - Scheduled feed skipped", msg, _storage.get_settings(), cfg,
+        f"Petlibro Local: {name} - {tr('Scheduled feed skipped')}", msg, _storage.get_settings(), cfg,
         notification_id=f"petlibro_local_{serial[:8]}_clock_skip_{int(meals[0])}")
 
 
@@ -2025,6 +2062,8 @@ async def _check_device_clock(serial: str, device_ts_ms) -> None:
     now = _t.time()
     offset = round(now - device_ts_ms / 1000.0)
     _clock_offset[serial] = offset
+    if relay.is_passive(serial):
+        return  # the cloud keeps the clock while the relay is up
     fix = _clock_fix_state.setdefault(serial, {"last_push": 0.0, "tries": 0, "backoff_until": 0.0})
     if abs(offset) <= CLOCK_OFFSET_THRESHOLD_SECS:
         fix["tries"] = 0
@@ -2129,9 +2168,9 @@ async def _check_missed_feeds() -> None:
                 name = cfg.get("name") or serial[:8]
                 import re as _re
                 when = _re.sub(r"(:\d\d):\d\d", r"\1", _format_local_time(int(expected * 1000)))
-                msg = (f"The {when} scheduled feed on {name} did not dispense "
-                       f"(nothing recorded within {MISSED_FEED_LEEWAY_SECS // 60} minutes).")
-                title = f"Petlibro Local: {name} - Scheduled feed missed"
+                msg = tr("The {when} scheduled feed on {device} did not dispense (nothing recorded within {minutes} minutes).",
+                         when=when, device=name, minutes=MISSED_FEED_LEEWAY_SECS // 60)
+                title = f"Petlibro Local: {name} - {tr('Scheduled feed missed')}"
                 _LOGGER.info("Missed scheduled feed on %s...: expected %s", serial[:6], when)
                 asyncio.ensure_future(_notifications.fire_notification(
                     title, msg, settings, cfg,
@@ -2214,9 +2253,9 @@ async def _offline_watchdog():
                 # the same stretch of not eating; a new meal changes that value.
                 already = pet.get("no_eat_alerted_for") == last_eat_ms or _pet_no_eat_alerted.get(pet_id)
                 if secs_since >= threshold and not already:
-                    pet_name = pet.get("name") or "Your pet"
+                    pet_name = pet.get("name") or tr("Your pet")
                     hrs = secs_since / 3600
-                    msg   = f"{pet_name} has not eaten in {hrs:.1f} hours."
+                    msg   = tr("{pet} has not eaten in {hours} hours.", pet=pet_name, hours=f"{hrs:.1f}")
                     title = f"Petlibro Local: {msg}"
                     notify_cfg = {
                         "notify_bell":   pet.get("notify_bell",   True),
@@ -2329,6 +2368,7 @@ async def _mqtt_loop():
                         })
                         _prune_raw_capture(_now)
                         if recognized:
+                            relay.forward(serial, parts[1], topic_str, message.payload, _local_publish, _answer_locally)
                             _handle_message(serial, topic_str, payload_str)
                         elif serial not in _unrecognized_serials_seen:
                             _unrecognized_serials_seen.add(serial)
@@ -2349,6 +2389,50 @@ async def _mqtt_loop():
                 _mark_offline(serial)
             for serial in list(_devices):
                 asyncio.ensure_future(_check_and_fire_alerts(serial))
+
+
+async def _answer_locally(serial: str, topic_str: str, payload) -> None:
+    """Answer a request that was left to the cloud, after the relay failed to
+    deliver it. Only the reply is sent: the message itself (logs, state, food
+    counts) was already handled when it arrived."""
+    try:
+        data = json.loads(payload)
+    except Exception:
+        return
+    cmd = data.get("cmd")
+    if cmd == "NTP":
+        await _respond_ntp(topic_str, data.get("ts"))
+    elif cmd == "GET_FEEDING_PLAN_EVENT":
+        await _respond_feeding_plan(serial, topic_str)
+    elif cmd == "DEVICE_START_EVENT":
+        await _publish_start_ack(serial, topic_str, data)
+    elif cmd == "GRAIN_OUTPUT_EVENT":
+        await _publish_grain_ack(topic_str, data)
+
+
+def _adopt_cloud_plans(serial: str, plans: list) -> None:
+    """With the relay the Petlibro app owns the schedule: store the plans the
+    cloud gives the feeder, so Next Meal, the missed-feed check and a later
+    local answer use them."""
+    import storage as _storage
+    _storage.save_device_feeding_plans(serial, plans)
+    if plans and _storage.schedules_paused(serial):
+        _storage.save_device(serial, {"schedules_paused": False})  # the feeder runs them again
+
+
+async def _local_publish(topic: str, payload) -> None:
+    """Hand a cloud message to the device through the local broker."""
+    parts = topic.split("/")
+    try:
+        data = json.loads(payload)
+    except Exception:
+        data = {}
+    if (len(parts) > 2 and parts[2] in _devices and isinstance(data, dict)
+            and data.get("cmd") == "GET_FEEDING_PLAN_EVENT" and data.get("code", 0) == 0
+            and isinstance(data.get("plans"), list)):
+        _adopt_cloud_plans(parts[2], data["plans"])
+    if _client_ref is not None:
+        await _client_ref.publish(topic, payload)
 
 
 # ── Connection test ────────────────────────────────────────────────────────

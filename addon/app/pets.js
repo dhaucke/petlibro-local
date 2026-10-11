@@ -16,7 +16,7 @@ function renderPets() {
   list.innerHTML = _pets.map(p => `<div class="pet-card" data-pet-id="${escHtml(p.id)}" style="position:relative">
     <div class="pet-avatar">${p.image_url ? `<img src="${escHtml(p.image_url)}" alt="">` : "🐾"}</div>
     <div class="pet-info">
-      <div class="pet-name">${escHtml(p.name || "Unnamed pet")}</div>
+      <div class="pet-name">${escHtml(p.name || t("pet.unnamed"))}</div>
       <div class="pet-sub">${escHtml(p.breed || "")}${p.weight_kg ? ` · ${useImperial() ? (p.weight_kg * 2.20462).toFixed(1) + " lbs" : p.weight_kg + " kg"}` : ""}</div>
     </div>
     <button class="btn-pet-delete-card" data-pet-id="${escHtml(p.id)}" title="Delete pet"
@@ -38,7 +38,7 @@ function renderPets() {
       e.stopPropagation();
       const pet = _pets.find(p => p.id === btn.dataset.petId);
       const name = pet?.name || "this pet";
-      if (!confirm(`Delete ${name}?`)) return;
+      if (!confirm(t("pet.delete_named", {name}))) return;
       await api("DELETE", `/api/pets/${btn.dataset.petId}`);
       await refresh();
     });
@@ -132,10 +132,10 @@ function openPetModal(pet) {
   const actLog     = document.getElementById("p-activity-log");
   if (pet) {
     actSection.style.display = "";
-    actLog.innerHTML = `<div style="color:var(--pl-subtext);font-size:12px">Loading...</div>`;
+    actLog.innerHTML = `<div style="color:var(--pl-subtext);font-size:12px">${t("device_modal.loading")}</div>`;
     api("GET", `/api/pets/${pet.id}/log?limit=30`).then(events => {
       if (!events.length) {
-        actLog.innerHTML = `<div style="color:var(--pl-subtext);font-size:12px">No activity recorded yet.</div>`;
+        actLog.innerHTML = `<div style="color:var(--pl-subtext);font-size:12px">${t("pet.no_activity")}</div>`;
         return;
       }
       actLog.innerHTML = events.map(e => {
@@ -157,7 +157,7 @@ function openPetModal(pet) {
         </div>`;
       }).join("");
     }).catch(() => {
-      actLog.innerHTML = `<div style="color:var(--pl-subtext);font-size:12px">Could not load activity.</div>`;
+      actLog.innerHTML = `<div style="color:var(--pl-subtext);font-size:12px">${t("pet.activity_failed")}</div>`;
     });
   } else {
     actSection.style.display = "none";

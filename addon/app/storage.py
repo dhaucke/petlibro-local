@@ -17,7 +17,7 @@ _LOGGER = logging.getLogger(__name__)
 DATA_FILE = "/data/petlibro_local.json"
 
 DEFAULT_SETTINGS = {
-    "language": "en",
+    "language": "auto",
     "mqtt_host": "localhost",
     "mqtt_port": 1883,
     "mqtt_user": "",
@@ -30,6 +30,7 @@ DEFAULT_SETTINGS = {
     "notify_email_to": "",
     "notify_mobile_default_service": "",
     "local_audio_base_url": "",
+    "cloud_mqtt_host": "mqtt.us.petlibro.com",
 }
 
 ALLOWED_SETTINGS = set(DEFAULT_SETTINGS.keys()) | {"feeder_timezone"}
@@ -61,6 +62,7 @@ ALLOWED_DEVICE_FIELDS = {
     "display_animation_name",
     "sound_hours_mode", "sound_start_local", "sound_end_local",
     "display_hours_mode", "display_start_local", "display_end_local",
+    "cloud_relay", "mqtt_client_id",
 }
 
 ALLOWED_PET_FIELDS = {
