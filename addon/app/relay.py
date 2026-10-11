@@ -1,4 +1,4 @@
-"""Cloud relay (dhaucke fork): keeps the official Petlibro app working.
+"""Cloud relay: keeps the official Petlibro app working.
 
 A device redirected to the local broker drops its Petlibro cloud connection, so
 the app shows it offline. For a device with cloud_relay on, this module opens a

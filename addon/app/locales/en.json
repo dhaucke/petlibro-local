@@ -541,5 +541,12 @@
   "pet.no_activity": "No activity recorded yet.",
   "pet.activity_failed": "Could not load activity.",
   "variant.b": "Black",
-  "variant.w": "White"
+  "variant.w": "White",
+  "settings.emqx_api": "EMQX API key (only with the EMQX broker)",
+  "settings.emqx_api_key": "API key",
+  "settings.emqx_api_secret": "Secret key",
+  "settings.emqx_api_hint": "Lets the add-on create the device logins in EMQX's built-in user database. Create the key in the EMQX dashboard under System → API Keys. Not needed with Mosquitto.",
+  "broker.login_manual": "The device login could not be created or checked in EMQX automatically. Enter the EMQX API key in Settings → MQTT and press Re-save Credentials, or check the login in the EMQX dashboard yourself (username and password are under Edit; a login with this name that was not created here is left unchanged).",
+  "settings.broker_addon": "Broker add-on (optional)",
+  "settings.broker_addon_hint": "Leave empty: the add-on finds Mosquitto or EMQX by itself. Only if both run, enter the slug of the one in use (core_mosquitto or the EMQX slug, e.g. a0d7b954_emqx)."
 }

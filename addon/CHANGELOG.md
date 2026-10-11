@@ -2,13 +2,19 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
-## 2026.10.3 (dhaucke fork)
+## 2026.10.4
+- Works with the EMQX broker add-on as well as Mosquitto: the add-on finds which one is installed. Auto Setup stops that broker for the capture, and with EMQX the device logins go into EMQX's built-in user database through its REST API (new Settings fields EMQX API key and secret key, created in the EMQX dashboard under System → API Keys); EMQX applies them without a restart, so devices are not rebooted. Without an API key, or without EMQX's built-in database, the add-on logs that the login has to be created in EMQX by hand. Before, with EMQX, Auto Setup aborted ("App is not installed") and no device login was saved
+- If Mosquitto and EMQX both run, the add-on no longer guesses: set the one in use under Settings → MQTT → Broker add-on. Logins it created are tracked per broker, so switching brokers never touches accounts it did not create
+- The add-on no longer says "(dhaucke fork)" in its name and changelog
+- The version shown in the log and Help/About was stuck at 2026.10.1; a test now checks it against config.yaml
+
+## 2026.10.3
 - New per-device **Cloud relay** (Add Device and Edit Device): the add-on keeps the device's Petlibro cloud connection alive with the device's own client id and login and passes its messages through, so the official Petlibro app keeps working while Home Assistant gets everything locally. While the cloud is reachable it answers the device (time sync, feeding plans, boot and dispense acks) and the add-on stays quiet for that device, so the device never gets two answers; feeding plans are then managed in the Petlibro app and the add-on copies the plan the feeder confirms. If the cloud is not reachable, or leaves a request unanswered for 15 seconds, the add-on answers the device itself; a late cloud reply to a request answered locally is dropped, so the device still gets one answer. The cloud connection is dropped when the device goes offline, so the app shows it offline too. New Settings field Cloud MQTT host (default `mqtt.us.petlibro.com`); the relay refuses a host that resolves to a local address (a DNS rewrite would make it connect to itself)
 - German translation of the whole interface (`locales/de.json`) and of all notifications (`i18n.py`). Language now defaults to the browser language instead of English
 - Remaining hardcoded English texts in the pet dialog, icon editor and a few messages go through the translation now
 - Not yet tested against the real Petlibro cloud: whether it accepts the relay's wildcard subscription (it falls back to the known service/event/ntp topics if refused)
 
-## 2026.10.2 (dhaucke fork)
+## 2026.10.2
 - Web server only accepts requests from the Supervisor ingress proxy (172.30.32.2). Before, `/api/*` accepted the whole 172.30.32.0/23 network (every other add-on container) and the UI, images and scripts were open to the LAN. `/audio/*` stays open because feeders fetch custom sounds directly
 - `/api/diag/mosquitto` no longer returns the Mosquitto add-on options, which contain every Mosquitto login in plaintext; it now returns only state and version
 - Auto Setup no longer adds captured credentials to Mosquitto on its own. Any LAN client with a Petlibro-like client id could connect during the 60 second capture window; the login is now created when you confirm the device with Add Device

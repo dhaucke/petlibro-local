@@ -21,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 _LOGGER = logging.getLogger(__name__)
 
-VERSION = "2026.10.1"
+VERSION = "2026.10.4"
 
 # Credential capture state
 _capture_state: dict = {"status": "idle", "result": {}}
@@ -318,7 +318,8 @@ async def handle_api_device_add(request):
                     "device may not authenticate until credentials are re-added manually",
                     serial[:6],
                 )
-        return web.json_response(device)
+        # "manual": EMQX could not take the login (no API key / built-in database), the UI warns
+        return web.json_response({**device, "broker_login": login_result})
     except Exception:
         _LOGGER.exception("Failed to add device")
         return web.Response(status=400, text="Bad request")
@@ -356,9 +357,9 @@ async def handle_api_device_delete(request):
             # Same username, different password — restore the remaining device's password.
             remaining_pass = sharing_device.get("mqtt_pass", "")
             result = await mosquitto.add_mosquitto_login(mqtt_user, remaining_pass)
-            if result in ("added", "exists"):
+            if result in ("added", "added_live", "exists"):
                 _LOGGER.info("Restored Mosquitto password for shared user %s... after device delete", mqtt_user[:4])
-                needs_restart = True
+                needs_restart = result == "added"
             else:
                 _LOGGER.error("Failed to restore Mosquitto password for %s... after device delete", mqtt_user[:4])
         else:

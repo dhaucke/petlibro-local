@@ -1,4 +1,4 @@
-"""Checks for the dhaucke fork's security fixes (run: .venv/bin/pytest tests)."""
+"""Checks for the security hardening (run: .venv/bin/python -m pytest -q -p no:aiohttp tests)."""
 
 import sys
 from pathlib import Path

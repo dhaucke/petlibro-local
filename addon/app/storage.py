@@ -31,6 +31,9 @@ DEFAULT_SETTINGS = {
     "notify_mobile_default_service": "",
     "local_audio_base_url": "",
     "cloud_mqtt_host": "mqtt.us.petlibro.com",
+    "broker_addon": "",
+    "emqx_api_key": "",
+    "emqx_api_secret": "",
 }
 
 ALLOWED_SETTINGS = set(DEFAULT_SETTINGS.keys()) | {"feeder_timezone"}

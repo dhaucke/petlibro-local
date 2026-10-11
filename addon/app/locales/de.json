@@ -541,5 +541,12 @@
   "pet.no_activity": "Noch keine Aktivität erfasst.",
   "pet.activity_failed": "Aktivität konnte nicht geladen werden.",
   "variant.b": "Schwarz",
-  "variant.w": "Weiß"
+  "variant.w": "Weiß",
+  "settings.emqx_api": "EMQX-API-Schlüssel (nur beim EMQX-Broker)",
+  "settings.emqx_api_key": "API-Schlüssel",
+  "settings.emqx_api_secret": "Geheimer Schlüssel",
+  "settings.emqx_api_hint": "Damit legt das Add-on die Geräte-Logins in der eingebauten Benutzerdatenbank von EMQX an. Den Schlüssel erstellst du im EMQX-Dashboard unter System → API-Schlüssel. Mit Mosquitto nicht nötig.",
+  "broker.login_manual": "Der Geräte-Login konnte in EMQX nicht automatisch angelegt oder geprüft werden. Trag den EMQX-API-Schlüssel unter Einstellungen → MQTT ein und drück „Zugangsdaten erneut speichern“, oder prüf den Login im EMQX-Dashboard selbst (Benutzername und Passwort stehen unter „Bearbeiten“; ein nicht hier angelegter Login mit diesem Namen bleibt unverändert).",
+  "settings.broker_addon": "Broker-Add-on (optional)",
+  "settings.broker_addon_hint": "Leer lassen: Das Add-on findet Mosquitto oder EMQX selbst. Nur wenn beide laufen, trag den Slug des genutzten ein (core_mosquitto oder den EMQX-Slug, z. B. a0d7b954_emqx)."
 }

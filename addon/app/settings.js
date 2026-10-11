@@ -259,6 +259,9 @@ function renderSettings() {
   document.getElementById("s-mqtt-user").value = _settings.mqtt_user || "";
   document.getElementById("s-mqtt-pass").value = _settings.mqtt_pass || "";
   document.getElementById("s-cloud-mqtt-host").value = _settings.cloud_mqtt_host || "";
+  document.getElementById("s-broker-addon").value = _settings.broker_addon || "";
+  document.getElementById("s-emqx-api-key").value = _settings.emqx_api_key || "";
+  document.getElementById("s-emqx-api-secret").value = _settings.emqx_api_secret || "";
   const unitsSel = document.getElementById("s-units");
   if (unitsSel) {
     for (const opt of unitsSel.options) {
@@ -298,6 +301,9 @@ async function saveSettings(fromTab) {
     mqtt_user: document.getElementById("s-mqtt-user").value.trim(),
     mqtt_pass: document.getElementById("s-mqtt-pass").value,
     cloud_mqtt_host: document.getElementById("s-cloud-mqtt-host").value.trim() || "mqtt.us.petlibro.com",
+    broker_addon: document.getElementById("s-broker-addon").value.trim(),
+    emqx_api_key: document.getElementById("s-emqx-api-key").value.trim(),
+    emqx_api_secret: document.getElementById("s-emqx-api-secret").value,
     language: document.getElementById("s-language").value,
     units: document.getElementById("s-units").value,
     feeder_timezone: document.getElementById("s-feeder-tz")?.value || "America/Denver",

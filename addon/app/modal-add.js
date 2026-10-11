@@ -119,7 +119,8 @@ async function finishAutoDevice() {
     pet_ids: selectedPetIds("a-pet-list"),
   };
   try {
-    await api("POST", "/api/devices", body);
+    const added = await api("POST", "/api/devices", body);
+    if (added.broker_login === "manual") alert(t("broker.login_manual"));
     document.getElementById("modal-add-device").classList.remove("open");
     await refresh();
   } catch(e) { alert(t("add_device.err_add", {error: e.message})); }
@@ -172,7 +173,8 @@ async function finishManualDevice() {
     pet_ids: selectedPetIds("w-pet-list"),
   };
   try {
-    await api("POST", "/api/devices", body);
+    const added = await api("POST", "/api/devices", body);
+    if (added.broker_login === "manual") alert(t("broker.login_manual"));
     document.getElementById("modal-add-device").classList.remove("open");
     await refresh();
   } catch(e) { alert(t("add_device.err_add", {error: e.message})); }

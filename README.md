@@ -1,6 +1,6 @@
 # Petlibro Local - Home Assistant App
 
-> **dhaucke fork** of [smcneece/petlibro-local](https://github.com/smcneece/petlibro-local) with security hardening (see `CHANGELOG.md`): the web server only answers the Supervisor ingress proxy (except `/audio/*`, which feeders fetch directly), diagnostics no longer return Mosquitto logins, captured credentials only become a Mosquitto login after you confirm the device, logins the app did not create are never changed or removed, `hassio_role: manager` instead of `admin`, no `/share` mapping, and pinned base image and Python packages. Since 2026.10.3 it also has a per-device **Cloud relay** that keeps the official Petlibro app working alongside local control, and a German translation.
+> Based on [smcneece/petlibro-local](https://github.com/smcneece/petlibro-local) (MIT) and developed further here: a per-device **Cloud relay** that keeps the official Petlibro app working alongside local control, support for the EMQX broker as well as Mosquitto, a German translation, and security hardening (the web server only answers the Supervisor ingress proxy except `/audio/*`, diagnostics never return broker logins, captured credentials only become a broker login after you confirm the device, logins the app did not create are never changed or removed, `hassio_role: manager`, pinned base image and packages). Details in `CHANGELOG.md`.
 
 > **Setup note:** this is still a young project, though it has been running my own devices since mid-August. You should be comfortable with Home Assistant, Mosquitto broker configuration, and local DNS overrides before attempting setup.
 
@@ -176,7 +176,7 @@ First set up your DNS override and read the notes on keeping devices on your loc
 
 Petlibro firmware appears to cache the cloud broker's IP address and falls back to it directly, bypassing DNS, if your local broker is unavailable even briefly. The most reliable fix is to **block the device from the internet** at your router. Some firmware never looks up the broker name at all, which needs a source-based NAT rule instead, and one firmware also asks a second DNS server (`8.8.4.4`). The details and the router rule are in [Networking](docs/networking.md#keeping-devices-on-local-mqtt).
 
-### Cloud Relay (dhaucke fork)
+### Cloud Relay
 
 Turn on **Cloud relay** when adding a device (or later under Edit) to keep the official Petlibro app working. The add-on connects to the Petlibro cloud with the device's own captured login and passes messages both ways. The device still has to reach your Home Assistant broker, so the redirect is still needed. Blocking the device itself from the internet stays fine: the cloud connection comes from Home Assistant, not from the device.
 

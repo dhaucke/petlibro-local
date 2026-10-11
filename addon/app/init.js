@@ -100,7 +100,8 @@ async function detectLanguage(availableLangs) {
     hint.style.display = "none";
     try {
       const r = await api("POST", `/api/devices/${_currentDevice.serial}/resave-creds`);
-      hint.textContent = r.result === "added" ? t("edit_device.resave_added") : t("edit_device.resave_exists");
+      hint.textContent = r.result === "manual" ? t("broker.login_manual")
+        : ["added", "added_live"].includes(r.result) ? t("edit_device.resave_added") : t("edit_device.resave_exists");
       hint.style.color = "var(--pl-success)";
     } catch (e) {
       hint.textContent = t("edit_device.resave_failed", {error: e.message || "check add-on logs"});

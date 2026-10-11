@@ -201,6 +201,22 @@
           </div>
         </div>
         <div class="form-row">
+          <label class="form-label" data-i18n="settings.broker_addon">Broker add-on (optional)</label>
+          <input class="form-input" id="s-broker-addon" type="text" autocomplete="off" placeholder="a0d7b954_emqx">
+          <p class="form-hint" data-i18n="settings.broker_addon_hint">Leave empty: the add-on finds Mosquitto or EMQX by itself. Only if both run, enter the slug of the one in use (core_mosquitto or the EMQX slug, e.g. a0d7b954_emqx).</p>
+        </div>
+        <div class="form-row">
+          <label class="form-label" data-i18n="settings.emqx_api">EMQX API key (only with the EMQX broker)</label>
+          <div style="display:flex;gap:8px">
+            <input class="form-input" id="s-emqx-api-key" type="text" autocomplete="off" data-i18n-ph="settings.emqx_api_key" placeholder="API key">
+            <div class="pw-wrap">
+              <input class="form-input" id="s-emqx-api-secret" type="password" autocomplete="off" data-i18n-ph="settings.emqx_api_secret" placeholder="Secret key">
+              <button class="btn-eye" type="button" data-target="s-emqx-api-secret" title="Show/hide">👁</button>
+            </div>
+          </div>
+          <p class="form-hint" data-i18n="settings.emqx_api_hint">Lets the add-on create the device logins in EMQX's built-in user database. Create the key in the EMQX dashboard under System → API Keys. Not needed with Mosquitto.</p>
+        </div>
+        <div class="form-row">
           <label class="form-label" data-i18n="settings.cloud_mqtt_host">Cloud MQTT host (relay)</label>
           <input class="form-input" id="s-cloud-mqtt-host" type="text" placeholder="mqtt.us.petlibro.com">
           <p class="form-hint" data-i18n="settings.cloud_mqtt_host_hint">Petlibro broker the cloud relay connects to. Must resolve to its public address, not to Home Assistant.</p>

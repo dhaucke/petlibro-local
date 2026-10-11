@@ -1,4 +1,4 @@
-"""Notification texts in the add-on's language (dhaucke fork).
+"""Notification texts in the add-on's language.
 
 Texts are written in English with {placeholders}; tr() swaps in the German
 version when Settings > Language is German. An English text without an entry
