@@ -1,7 +1,7 @@
 name: Petlibro Local
 description: Local MQTT control for Petlibro fountains and feeders — no cloud required
-url: https://github.com/smcneece/petlibro-local
-version: "2026.10.1"
+url: https://github.com/dhaucke/petlibro-local
+version: "2026.10.2"
 slug: petlibro_local
 init: false
 arch:
@@ -15,9 +15,7 @@ panel_icon: mdi:cat
 panel_title: Petlibro Local
 homeassistant_api: true
 hassio_api: true
-hassio_role: admin
+hassio_role: manager
 host_network: true
-map:
-  - share:rw
 options: {}
 schema: {}

@@ -164,6 +164,24 @@ def save_settings(updates: dict) -> dict:
     return current
 
 
+def get_managed_logins() -> set:
+    """Mosquitto usernames this add-on created itself and may change or remove."""
+    # Deliberately not inferred from saved devices: Add Device saves the device
+    # before creating its login, so that would mark any existing username ours.
+    return set(_load().get("managed_logins", []))
+
+
+def set_login_managed(username: str, managed: bool):
+    data = _load()
+    logins = set(data.get("managed_logins", []))
+    if managed:
+        logins.add(username)
+    else:
+        logins.discard(username)
+    data["managed_logins"] = sorted(logins)
+    _save(data)
+
+
 def get_devices() -> dict:
     return _load().get("devices", {})
 

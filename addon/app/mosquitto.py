@@ -5,6 +5,7 @@ import os
 
 import aiohttp
 
+import storage
 from ha_config import SUPERVISOR_TOKEN, _headers
 
 _LOGGER = logging.getLogger(__name__)
@@ -109,6 +110,9 @@ async def remove_mosquitto_login(username: str) -> str:
 
         current_opts = info.get("data", {}).get("options", {})
         logins = list(current_opts.get("logins", []))
+        if username not in storage.get_managed_logins():
+            _LOGGER.warning("Login %s... was not created by Petlibro Local, leaving it in place", username[:4])
+            return "not_managed"
         new_logins = [e for e in logins if e.get("username") != username]
         if len(new_logins) == len(logins):
             _LOGGER.info("Login for %s... not found in Mosquitto (nothing to remove)", username[:4])
@@ -124,6 +128,7 @@ async def remove_mosquitto_login(username: str) -> str:
             ) as resp:
                 if resp.status == 200:
                     _LOGGER.info("Removed Mosquitto login for %s...", username[:4])
+                    storage.set_login_managed(username, False)
                     return "removed"
                 text = await resp.text()
                 _LOGGER.error("Failed to save Mosquitto options: HTTP %d — %s", resp.status, text[:200])
@@ -139,6 +144,7 @@ async def add_mosquitto_login(username: str, password: str) -> str:
     Returns:
         "added"  — credentials were new and saved successfully
         "exists" — credentials already present, no change made
+        "conflict" — username belongs to a login we did not create, left unchanged
         "error"  — Supervisor API call failed
     """
     if not SUPERVISOR_TOKEN:
@@ -167,7 +173,12 @@ async def add_mosquitto_login(username: str, password: str) -> str:
                 if entry.get("password") == password:
                     _LOGGER.info("Login for %s... already exists in Mosquitto (unchanged)", username[:4])
                     return "exists"
-                # Same username, different password — update it.
+                # Same username, different password: only update logins we created,
+                # never another user's or app's Mosquitto account.
+                if username not in storage.get_managed_logins():
+                    _LOGGER.error("Login %s... already exists in Mosquitto and was not created by "
+                                  "Petlibro Local, refusing to change its password", username[:4])
+                    return "conflict"
                 entry["password"] = password
                 _LOGGER.info("Login for %s... exists in Mosquitto — updating password", username[:4])
                 new_options = {**current_opts, "logins": logins}
@@ -196,6 +207,7 @@ async def add_mosquitto_login(username: str, password: str) -> str:
             ) as resp:
                 if resp.status == 200:
                     _LOGGER.info("Added Mosquitto login for %s...", username[:4])
+                    storage.set_login_managed(username, True)
                     return "added"
                 text = await resp.text()
                 _LOGGER.error("Failed to save Mosquitto options: HTTP %d — %s", resp.status, text[:200])

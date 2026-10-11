@@ -1,10 +1,12 @@
 # Petlibro Local - Home Assistant App
 
+> **dhaucke fork** of [smcneece/petlibro-local](https://github.com/smcneece/petlibro-local) with security hardening (see `CHANGELOG.md`): the web server only answers the Supervisor ingress proxy (except `/audio/*`, which feeders fetch directly), diagnostics no longer return Mosquitto logins, captured credentials only become a Mosquitto login after you confirm the device, logins the app did not create are never changed or removed, `hassio_role: manager` instead of `admin`, no `/share` mapping, and pinned base image and Python packages.
+
 > **Setup note:** this is still a young project, though it has been running my own devices since mid-August. You should be comfortable with Home Assistant, Mosquitto broker configuration, and local DNS overrides before attempting setup. Bug reports and feedback are very welcome; please use [GitHub Issues](https://github.com/smcneece/petlibro-local/issues).
 
 Keep your Petlibro fountains and feeders running entirely on your local network. Petlibro Local intercepts your devices' MQTT credentials during setup, connects them directly to your Home Assistant Mosquitto broker, and gives you desktop and mobile control panel with no Petlibro cloud dependency after that.
 
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/smcneece/petlibro-local)](https://github.com/smcneece/petlibro-local/releases)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/dhaucke/petlibro-local)](https://github.com/dhaucke/petlibro-local/releases)
 [![GitHub](https://img.shields.io/github/license/smcneece/petlibro-local)](LICENSE)
 
 > **Before you start:** your device first has to be connected to your Wi-Fi with the official Petlibro app (that one-time setup needs the app and a Petlibro account). Once it's on your Wi-Fi, it can run 100% locally, with no cloud and no internet access at all.
@@ -12,11 +14,6 @@ Keep your Petlibro fountains and feeders running entirely on your local network.
 > **Is your device on newer firmware than the ones I've tested?** I've seen One RFID feeders on firmware 3.0.72 (hardware 5.0.0) and 2.0.47 (hardware 4.0.0), and Dockstream 2 fountains on 0.0.34 (hardware 1.0.0). I have no version for the other models. If yours shows something different (it's at the top of the device's modal), please [open an issue](https://github.com/smcneece/petlibro-local/issues) and tell me the version. If you're comfortable testing it, also tell me whether the device still reboots when Mosquitto restarts (see [Restarting Mosquitto Reboots Your Devices](#restarting-mosquitto-reboots-your-devices)). Newer firmware may behave differently, and it helps me work out what to build next.
 
 > ⚠️ **Installation type**: Petlibro Local is a Home Assistant App requiring a Supervisor-managed installation (HA OS or HA Supervised). Home Assistant Core and Home Assistant Container are not supported.
-
-> [![Sponsor](https://img.shields.io/badge/Sponsor-💖-pink)](https://github.com/sponsors/smcneece) If Petlibro Local keeps your fountain running after Petlibro changes their cloud or you just want your devices off the internet, consider sponsoring. Check out my [other HA projects](https://github.com/smcneece?tab=repositories) as well.
->
-> ⭐ **Finding this useful?** Star the repo so other HA users can find it.
-> [![GitHub stars](https://img.shields.io/github/stars/smcneece/petlibro-local?style=social)](https://github.com/smcneece/petlibro-local/stargazers)
 
 ---
 
@@ -152,13 +149,13 @@ debug: false
 1. In Home Assistant go to **Settings → Apps → Install App**
 2. Click the **⋮** menu (top right) and select **Repositories**
 3. Click **+ Add** (bottom right corner)
-4. Paste `https://github.com/smcneece/petlibro-local` and click **Add**
+4. Paste `https://github.com/dhaucke/petlibro-local` and click **Add**
 
 Once the repository is added:
 
 1. Find **Petlibro Local** in the App Store and click it.
 2. Click **Install** and wait for the download to complete.
-3. Enable **Start on boot** and **Auto-update**.
+3. Enable **Start on boot**. Leave **Auto-update** off and review each update first.
 4. Enable **Show in sidebar** for quick access.
 5. Click **Start**.
 6. Click **Open Web UI** or use the Petlibro Local link in the sidebar.

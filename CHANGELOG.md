@@ -2,6 +2,14 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/smcneece/petlibro-local/releases).
 
+## 2026.10.2 (dhaucke fork)
+- Web server only accepts requests from the Supervisor ingress proxy (172.30.32.2). Before, `/api/*` accepted the whole 172.30.32.0/23 network (every other add-on container) and the UI, images and scripts were open to the LAN. `/audio/*` stays open because feeders fetch custom sounds directly
+- `/api/diag/mosquitto` no longer returns the Mosquitto add-on options, which contain every Mosquitto login in plaintext; it now returns only state and version
+- Auto Setup no longer adds captured credentials to Mosquitto on its own. Any LAN client with a Petlibro-like client id could connect during the 60 second capture window; the login is now created when you confirm the device with Add Device
+- Mosquitto logins that Petlibro Local did not create itself are never changed or removed (before, a device username matching an existing login overwrote its password, and deleting the device removed it)
+- `hassio_role: manager` instead of `admin` (all the app needs is managing the Mosquitto add-on), removed the unused `share:rw` mapping
+- Pinned the base image (`base-python:3.13-alpine3.24-2026.08.0`) and Python packages (`aiohttp==3.14.3`, `aiomqtt==2.5.1`, `tzdata==2026.4`)
+
 ## Unreleased
 - New per-feeder "Food Amount Unit" choice in the Schedule tab for the One RFID and Granary feeders, matching the Petlibro app's own Food Amount setting: cup, ounces, grams or milliliters (or Automatic, which keeps following Settings > Units exactly as before). One portion is 1/12 cup or 20 ml, as the Petlibro app shows it. Cups and ml are the feeder's fixed scoop volume, while grams and ounces depend on your food (10 g per portion unless you calibrate)
 - The automatic clock correction for feeders is now careful around scheduled feeds. A feeder only fires a meal when its own clock reaches that exact second, so pushing a slow clock forward over a meal time can skip that meal, and pulling a fast clock back over a meal it already fed can feed it again (reported from another user's testing, and consistent with a late feed seen here). The correction is now held while a scheduled feed falls inside the jump: a slow clock is corrected after that feed fires (late, not skipped), or after an hour at most, in which case you get a notification naming the skipped feed. A fast clock is never forced back over a feed that could repeat (a few seconds of margin is allowed at each end of the jump). The app never dispenses food to make up for a skipped feed, that is left to you. Feeders are no longer given a blind time sync the moment they reconnect, the next heartbeat (about a minute later) does the check instead

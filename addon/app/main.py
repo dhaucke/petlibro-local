@@ -275,18 +275,27 @@ async def handle_api_device_add(request):
         serial = data.get("serial", "").strip().upper()
         if not serial:
             return web.Response(status=400, text="serial required")
+        # Ensure device credentials are in Mosquitto before saving anything, so a
+        # username that belongs to a login we did not create is rejected without
+        # touching an existing device's config or history.
+        # add_mosquitto_login is idempotent — returns "exists" if already present.
+        # If credentials were newly added we restart Mosquitto so it picks them up.
+        existing = storage.get_devices().get(serial, {})
+        mqtt_user = data.get("mqtt_user", existing.get("mqtt_user", ""))
+        mqtt_pass = data.get("mqtt_pass", existing.get("mqtt_pass", ""))
+        login_result = "skipped"
+        if mqtt_user and mqtt_pass:
+            login_result = await mosquitto.add_mosquitto_login(mqtt_user, mqtt_pass)
+            if login_result == "conflict":
+                return web.Response(status=409, text=(
+                    "A Mosquitto login with this username already exists and was not "
+                    "created by Petlibro Local. Rename or remove that login first."))
         device = storage.save_device(serial, data)
         model = device.get("model", "")
         device_type = device.get("device_type", "")
         if model:
             devices.register_device(serial, model, device_type)
-        # Ensure device credentials are in Mosquitto.
-        # add_mosquitto_login is idempotent — returns True immediately if already present.
-        # If credentials were newly added we restart Mosquitto so it picks them up.
-        mqtt_user = device.get("mqtt_user", "")
-        mqtt_pass = device.get("mqtt_pass", "")
         if mqtt_user and mqtt_pass:
-            login_result = await mosquitto.add_mosquitto_login(mqtt_user, mqtt_pass)
             if login_result == "added":
                 # Newly added — restart Mosquitto so it picks up the new credentials.
                 # Suppress offline alerts briefly while devices reconnect.
@@ -372,6 +381,8 @@ async def handle_api_device_resave_creds(request):
     if not mqtt_user or not mqtt_pass:
         return web.json_response({"status": "error", "detail": "No credentials stored for this device"}, status=400)
     result = await mosquitto.add_mosquitto_login(mqtt_user, mqtt_pass)
+    if result == "conflict":
+        return web.json_response({"status": "error", "detail": "A Mosquitto login with this username already exists and was not created by Petlibro Local"}, status=409)
     if result == "error":
         return web.json_response({"status": "error", "detail": "Supervisor API call failed — check add-on logs"}, status=500)
     if result == "added":
@@ -577,19 +588,11 @@ async def handle_api_capture_start(request):
 
             if creds:
                 _LOGGER.info("Credentials captured for client %s...", creds.get("client_id", "")[:8])
-                # Add device credentials to Mosquitto before restarting so it can authenticate
-                username = creds.get("username", "")
-                password = creds.get("password", "")
-                login_result = "skipped"
-                if username and password:
-                    login_result = await mosquitto.add_mosquitto_login(username, password)
-                    if login_result == "error":
-                        _LOGGER.error(
-                            "Failed to save credentials for %s... to Mosquitto — "
-                            "device may not authenticate until credentials are re-added manually",
-                            username[:4],
-                        )
-                _capture_state = {"status": "captured", "result": creds, "login_saved": login_result in ("added", "exists")}
+                # The Mosquitto login is only created once the user confirms the
+                # device via Add Device (handle_api_device_add). Any LAN client with
+                # a Petlibro-like client id can connect during the capture window,
+                # so its credentials must not become a broker login unreviewed.
+                _capture_state = {"status": "captured", "result": creds}
             else:
                 _capture_state = {"status": "timeout", "result": {}}
                 _LOGGER.warning("Credential capture timed out — no Petlibro device connected")
@@ -643,10 +646,11 @@ async def handle_api_ha_mobile_targets(request):
 async def handle_api_diag_mosquitto(request):
     """Diagnostic: test Supervisor API access and Mosquitto info. Safe read-only call."""
     from ha_config import SUPERVISOR_TOKEN
-    info = await mosquitto.get_addon_info()
+    data = (await mosquitto.get_addon_info()).get("data", {})
+    # Never return "options": it holds every Mosquitto login in plaintext.
     return web.json_response({
         "token_set": bool(SUPERVISOR_TOKEN),
-        "mosquitto_info": info,
+        "mosquitto_info": {k: data.get(k) for k in ("state", "version", "version_latest")},
     })
 
 
@@ -915,39 +919,33 @@ async def on_startup(app):
     asyncio.ensure_future(_unsuppress())
 
 
-_INGRESS_NETWORK = ipaddress.ip_network("172.30.32.0/23")
+# Home Assistant's ingress proxy always connects from this address (see the
+# HA developer docs on ingress: "only allow connections from 172.30.32.2").
+_INGRESS_PROXY = ipaddress.ip_address("172.30.32.2")
 
 
 @web.middleware
-async def _restrict_api_middleware(request, handler):
-    """Security: /api/* returns MQTT broker credentials (the edit forms need
-    to show/re-save them), so it must never be reachable from outside this
-    container. Confirmed via live diagnostic logging (2026-09-15) that Home
-    Assistant Supervisor's ingress proxy reaches this add-on from 172.30.32.2,
-    the standard internal Supervisor address, same as any other add-on --
-    host_network: true only affects what this add-on's own listening port is
-    exposed to, not how Supervisor's ingress proxy reaches it. An earlier
-    version of this check assumed loopback instead and broke the real UI,
-    corrected after checking real log data rather than guessing again.
-    Anything outside 172.30.32.0/23 hitting /api/* is coming from the LAN,
-    not through ingress, and gets rejected. /audio and /images stay open on
-    purpose, the feeder itself fetches those directly over plain HTTP,
-    unauthenticated, by design.
+async def _restrict_to_ingress_middleware(request, handler):
+    """Security: with host_network the web server listens on the LAN, and
+    /api/* returns MQTT broker credentials. Only the Supervisor ingress proxy
+    may reach anything but /audio/*. A /23 check would also admit every other
+    add-on container, so the exact proxy address is required. /audio/* stays
+    open because the feeder fetches custom sounds directly over plain HTTP.
     """
-    if request.path.startswith("/api/"):
+    if not request.path.startswith("/audio/"):
         try:
             remote_ip = ipaddress.ip_address(request.remote)
         except (ValueError, TypeError):
             remote_ip = None
-        if remote_ip is None or remote_ip not in _INGRESS_NETWORK:
-            _LOGGER.warning("Blocked /api/* request from outside the internal network: %s %s",
+        if remote_ip != _INGRESS_PROXY:
+            _LOGGER.warning("Blocked request from outside ingress: %s %s",
                             request.remote, request.path)
             return web.Response(status=403, text="Forbidden")
     return await handler(request)
 
 
 def main():
-    app = web.Application(middlewares=[_restrict_api_middleware])
+    app = web.Application(middlewares=[_restrict_to_ingress_middleware])
     app.on_startup.append(on_startup)
 
     app.router.add_get("/",                              handle_index)
