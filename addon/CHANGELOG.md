@@ -2,6 +2,9 @@
 
 For full release notes and details on each version, see the [GitHub Releases page](https://github.com/dhaucke/petlibro-local/releases).
 
+## 2026.10.13
+- New icon and banner in the add-on store and in the add-on panel
+
 ## 2026.10.12
 - Polar Wet Food Feeder: backup battery level (card, overview and a Home Assistant Battery sensor) and the "Backup battery low" alert with its threshold under Alerts (0 turns it off), like the Granary. Without a battery fitted the feeder reports 0 and the add-on shows "—"
 

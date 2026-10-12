@@ -1,3 +1,5 @@
+![Petlibro Local for Home Assistant](https://raw.githubusercontent.com/dhaucke/petlibro-local/main/assets/petlibro-local-banner.png)
+
 # Petlibro Local - Home Assistant App
 
 > Based on [smcneece/petlibro-local](https://github.com/smcneece/petlibro-local) (MIT) and developed further here: a per-device **Cloud relay** that keeps the official Petlibro app working alongside local control, support for the EMQX broker as well as Mosquitto, a German translation, and security hardening (the web server only answers the Supervisor ingress proxy except `/audio/*`, diagnostics never return broker logins, captured credentials only become a broker login after you confirm the device, logins the app did not create are never changed or removed, `hassio_role: manager`, pinned base image and packages). Details in `CHANGELOG.md`.
